@@ -194,30 +194,29 @@ if "pipeline_result" in st.session_state:
             with out_tab1:
                 if result.pdf_success and result.pdf_bytes:
                     st.download_button(
-                        label="⬇️ Download PDF Resume",
+                        label="⬇️ Download PDF",
                         data=result.pdf_bytes,
-                        file_name=f"resume_{job_role.replace(' ','_').lower()}_{company.replace(' ','_').lower()}.pdf",
+                        file_name="resume.pdf",
                         mime="application/pdf",
                         use_container_width=True,
-                        type="primary",
                     )
-                    st.success("Your one-page resume PDF is ready to download!")
                 else:
-                    st.warning(
-                        f"PDF compilation encountered an issue: {result.pdf_error}\n\n"
-                        "You can copy the LaTeX source and compile it manually at "
-                        "[Overleaf](https://overleaf.com) or [LaTeX Online](https://latexonline.cc)."
-                    )
+                    st.error(f"PDF compilation failed: {result.pdf_error}")
+
 
             with out_tab2:
                 st.code(result.final_latex, language="latex", line_numbers=True)
-                st.download_button(
-                    label="⬇️ Download LaTeX Source",
-                    data=result.final_latex,
-                    file_name=f"resume_{job_role.replace(' ','_').lower()}.tex",
-                    mime="text/plain",
-                    use_container_width=True,
-                )
+                if result.pdf_success and result.pdf_bytes:
+                    st.download_button(
+                        label="⬇️ Download PDF",
+                        data=result.pdf_bytes,
+                        file_name="resume.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                else:
+                    st.error(f"PDF compilation failed: {result.pdf_error}")
+
 
         else:
             st.markdown(

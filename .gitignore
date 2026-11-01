@@ -1,20 +1,35 @@
-.env
-.venv/
+# Python
 __pycache__/
+*.py[cod]
 *.pyc
-*.pyo
-*.pyd
-.Python
+.venv/
+venv/
+.env
 *.egg-info/
-dist/
-build/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.log
-*.tmp
-*.pdf
-*.tex.bak
+
+# Node
 node_modules/
+dist/
+.next/
+.nuxt/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Docker
+*.log
+
+# Secrets
+.env.local
+.env.production
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage

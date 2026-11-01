@@ -31,11 +31,11 @@ class Settings(BaseSettings):
     agent1_model: str = "llama-3.3-70b-versatile"
 
     # ── Agent 2 (OSS 120B via OpenRouter) ────────────────────────────────────
-    openrouter_api_key: str = ""
+    groq_api_key: str = ""
     agent2_model: str = "meta-llama/llama-3.1-405b-instruct"
 
     # ── LLM 3 (Mistral Small) ────────────────────────────────────────────────
-    mistralai_api_key: str = ""
+    groq_api_key: str = ""
     llm3_model: str = "mistral-small-latest"
 
     # ── LangSmith ────────────────────────────────────────────────────────────

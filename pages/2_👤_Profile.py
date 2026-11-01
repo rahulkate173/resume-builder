@@ -209,7 +209,7 @@ with tab5:
     languages_raw = st.text_area(
         "Programming Languages (comma-separated)",
         value=", ".join(profile.get("languages", [])),
-        height=60,
+        height=68,
         placeholder="Python, C++, JavaScript, Go...",
     )
 

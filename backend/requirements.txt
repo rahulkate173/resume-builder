@@ -1,0 +1,32 @@
+# ── FastAPI Backend Requirements ─────────────────────────────────────────────
+
+# Core
+fastapi==0.115.5
+uvicorn[standard]==0.32.0
+python-dotenv==1.0.1
+
+# Pydantic
+pydantic==2.10.1
+pydantic-settings==2.6.1
+pydantic[email]==2.10.1
+
+# Database (async Motor)
+motor==3.6.0
+pymongo==4.9.2
+dnspython==2.7.0
+
+# Auth
+bcrypt==4.2.1
+pyjwt==2.10.1
+
+# LLM clients
+groq==0.12.0
+openai==1.57.0
+httpx>=0.27.0
+
+# Rate limiting
+slowapi==0.1.9
+
+# Utilities
+python-multipart==0.0.18
+orjson==3.10.12
