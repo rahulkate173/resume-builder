@@ -1,55 +1,61 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-#  run.sh  –  Start the AI Resume Builder (Linux / macOS / WSL / Git Bash)
-#  Usage:  bash run.sh
-# ─────────────────────────────────────────────────────────────────────────────
-
 set -euo pipefail
 
-BOLD="\033[1m"
-GREEN="\033[0;32m"
-YELLOW="\033[0;33m"
-RED="\033[0;31m"
-RESET="\033[0m"
-
-ok()   { echo -e "  ${GREEN}[OK]${RESET}   $*"; }
-warn() { echo -e "  ${YELLOW}[WARN]${RESET} $*"; }
-err()  { echo -e "  ${RED}[ERROR]${RESET} $*"; exit 1; }
-info() { echo -e "  [INFO] $*"; }
-
 echo ""
-echo -e "${BOLD} ╔══════════════════════════════════════════════╗${RESET}"
-echo -e "${BOLD} ║        AI Resume Builder – Startup           ║${RESET}"
-echo -e "${BOLD} ╚══════════════════════════════════════════════╝${RESET}"
+echo " ============================================================"
+echo "  AI Resume Builder v2 — Development Server"
+echo " ============================================================"
 echo ""
 
-# ── 1. Check .env exists ─────────────────────────────────────────────────────
-if [ ! -f ".env" ]; then
-    err ".env file not found. Copy .env.example to .env and fill in your keys."
-fi
-ok ".env found."
+# ── Check Python ────────────────────────────────────────────────────────────
+command -v python3 >/dev/null 2>&1 || { echo "[ERROR] python3 not found. Install Python 3.11+"; exit 1; }
 
-# ── 2. Create / activate virtual environment ──────────────────────────────────
-if [ ! -d ".venv" ]; then
-    warn ".venv not found. Creating virtual environment with uv..."
-    uv venv || err "Failed to create venv. Make sure 'uv' is installed: pip install uv"
-    ok "Virtual environment created."
+# ── Backend env ─────────────────────────────────────────────────────────────
+if [ ! -f backend/.env ]; then
+    echo "[INFO] Copying backend/.env.example → backend/.env"
+    cp backend/.env.example backend/.env
+    echo "[WARN] Edit backend/.env and add your API keys!"
 fi
 
-# Activate (works in bash/zsh; for fish use: source .venv/bin/activate.fish)
-# shellcheck disable=SC1091
-source .venv/bin/activate
-ok "Virtual environment activated."
+# ── Backend virtualenv ───────────────────────────────────────────────────────
+if [ ! -d backend/.venv ]; then
+    echo "[INFO] Creating Python virtual environment..."
+    python3 -m venv backend/.venv
+fi
+source backend/.venv/bin/activate
 
-# ── 3. Install / sync dependencies ───────────────────────────────────────────
-info "Syncing dependencies from requirements.txt..."
-uv pip install -r requirements.txt --quiet
-ok "Dependencies ready."
+# ── Install backend deps ─────────────────────────────────────────────────────
+echo "[INFO] Installing backend dependencies..."
+pip install -q -r backend/requirements.txt
 
-# ── 4. Launch Streamlit ───────────────────────────────────────────────────────
+# ── Check Node ───────────────────────────────────────────────────────────────
+command -v node >/dev/null 2>&1 || { echo "[ERROR] Node.js not found. Install Node.js 20+"; exit 1; }
+
+# ── Install frontend deps ────────────────────────────────────────────────────
+if [ ! -d frontend/node_modules ]; then
+    echo "[INFO] Installing frontend dependencies..."
+    (cd frontend && npm install)
+fi
+
 echo ""
-info "Starting Streamlit app on http://localhost:8501 ..."
-info "Press Ctrl+C to stop."
+echo " [INFO] Starting backend  → http://localhost:8000"
+echo " [INFO] Starting frontend → http://localhost:5173"
+echo ""
+echo " Docs: http://localhost:8000/docs"
+echo " App:  http://localhost:5173"
 echo ""
 
-streamlit run app.py
+# ── Start both servers ────────────────────────────────────────────────────────
+(cd backend && uvicorn app.main:app --reload --port 8000) &
+BACKEND_PID=$!
+
+(cd frontend && npm run dev) &
+FRONTEND_PID=$!
+
+echo "[INFO] Backend PID: $BACKEND_PID | Frontend PID: $FRONTEND_PID"
+echo "[INFO] Press Ctrl+C to stop both servers."
+
+# ── Graceful shutdown ────────────────────────────────────────────────────────
+trap "echo ''; echo '[INFO] Shutting down...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" INT TERM
+
+wait

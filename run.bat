@@ -1,56 +1,53 @@
 @echo off
-REM ─────────────────────────────────────────────────────────────────────────────
-REM  run.bat  –  Start the AI Resume Builder (Windows)
-REM  Usage:  run.bat
-REM ─────────────────────────────────────────────────────────────────────────────
-
-setlocal EnableDelayedExpansion
+setlocal
 
 echo.
-echo  ╔══════════════════════════════════════════════╗
-echo  ║        AI Resume Builder – Startup           ║
-echo  ╚══════════════════════════════════════════════╝
+echo  ============================================================
+echo   AI Resume Builder v2 — Development Server
+echo  ============================================================
 echo.
 
-REM ── 1. Check .env exists ─────────────────────────────────────────────────────
-if not exist ".env" (
-    echo [ERROR] .env file not found. Copy .env.example to .env and fill in your keys.
-    pause
-    exit /b 1
-)
-echo [OK] .env found.
+:: ── Check Python ────────────────────────────────────────────────────────────
+where python >nul 2>&1 || (echo [ERROR] Python not found. Install Python 3.11+ && exit /b 1)
 
-REM ── 2. Activate virtual environment ──────────────────────────────────────────
-if exist ".venv\Scripts\activate.bat" (
-    call .venv\Scripts\activate.bat
-    echo [OK] Virtual environment activated.
-) else (
-    echo [WARN] .venv not found. Creating virtual environment with uv...
-    uv venv
-    if errorlevel 1 (
-        echo [ERROR] Failed to create venv. Make sure 'uv' is installed.
-        pause
-        exit /b 1
-    )
-    call .venv\Scripts\activate.bat
-    echo [OK] Virtual environment created and activated.
+:: ── Backend env ─────────────────────────────────────────────────────────────
+if not exist backend\.env (
+    echo [INFO] Copying backend\.env.example to backend\.env
+    copy backend\.env.example backend\.env >nul
+    echo [WARN] Edit backend\.env and add your API keys before first run!
 )
 
-REM ── 3. Install / sync dependencies ───────────────────────────────────────────
-echo [INFO] Syncing dependencies from requirements.txt...
-uv pip install -r requirements.txt --quiet
-if errorlevel 1 (
-    echo [ERROR] Dependency installation failed. Check requirements.txt.
-    pause
-    exit /b 1
+:: ── Backend virtualenv ───────────────────────────────────────────────────────
+if not exist backend\.venv (
+    echo [INFO] Creating Python virtual environment...
+    python -m venv backend\.venv
 )
-echo [OK] Dependencies ready.
+call backend\.venv\Scripts\activate.bat
 
-REM ── 4. Launch Streamlit ───────────────────────────────────────────────────────
-echo.
-echo [INFO] Starting Streamlit app on http://localhost:8501 ...
-echo [INFO] Press Ctrl+C to stop.
-echo.
-streamlit run app.py
+:: ── Install backend deps ─────────────────────────────────────────────────────
+echo [INFO] Installing backend dependencies...
+pip install -q -r backend\requirements.txt
 
-endlocal
+:: ── Check Node ───────────────────────────────────────────────────────────────
+where node >nul 2>&1 || (echo [ERROR] Node.js not found. Install Node.js 20+ && exit /b 1)
+
+:: ── Install frontend deps ────────────────────────────────────────────────────
+if not exist frontend\node_modules (
+    echo [INFO] Installing frontend dependencies...
+    cd frontend && npm install && cd ..
+)
+
+echo.
+echo  [INFO] Starting backend on http://localhost:8000
+echo  [INFO] Starting frontend on http://localhost:5173
+echo.
+echo  Docs: http://localhost:8000/docs
+echo  App:  http://localhost:5173
+echo.
+
+:: ── Start servers in parallel ────────────────────────────────────────────────
+start "FastAPI Backend" cmd /k "cd backend && .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000"
+start "Vite Frontend"   cmd /k "cd frontend && npm run dev"
+
+echo [INFO] Both servers started. Press any key to exit.
+pause >nul

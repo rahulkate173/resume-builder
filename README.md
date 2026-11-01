@@ -1,244 +1,250 @@
-# AI Resume Builder 📄
+# 🧠 AI Resume Builder v2
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-brightgreen.svg)](https://python.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.40-red.svg)](https://streamlit.io)
-[![MongoDB](https://img.shields.io/badge/MongoDB-7.x-green.svg)](https://mongodb.com)
+> Production-grade, decoupled full-stack resume builder powered by a **multi-agent AI pipeline** — FastAPI · React · MongoDB · LaTeX
 
-An intelligent, multi-agent resume builder that generates **ATS-optimised, one-page LaTeX resumes** tailored to any job description — powered by a 3-agent AI pipeline with PDF output via Model Context Protocol (MCP).
+[![CI/CD](https://github.com/rahulkate173/resume-builder/actions/workflows/ci.yml/badge.svg)](https://github.com/rahulkate173/resume-builder/actions/workflows/ci.yml)
 
 ---
 
-## ✨ Features
+## ✨ What's New in v2
 
-| Feature | Details |
-|---|---|
-| 🤖 **Multi-Agent Pipeline** | Agent 1 generates, Agent 2 verifies & loops, LLM 3 polishes |
-| 🎯 **JD-Tailored Resumes** | Keywords matched, experience curated per job description |
-| 📎 **MCP PDF Generation** | LaTeX → PDF via FastMCP server (latexonline / local pdflatex) |
-| 👤 **Internal Profile** | Enter details once; reused for every resume |
-| 🔐 **Auth + MongoDB** | Secure login with JWT, all data in MongoDB |
-| 🎨 **3 LaTeX Templates** | Classic, Modern, Minimal (or AI auto-picks) |
-| 📚 **History** | Browse, download LaTeX and PDF from past runs |
-| 🌙 **Dark UI** | Glassmorphism dark-mode Streamlit interface |
-
----
-
-## 🏗 Architecture
-
-```
-Job Role + JD + Company ─┐
-Internal Profile ─────────┤
-Template ─────────────────┤
-                          ▼
-                    ┌─────────────┐
-                    │  Agent 1    │  ← Grok / Qwen  (via Groq API)
-                    │ [Generator] │    Selects template, generates LaTeX
-                    └──────┬──────┘
-                           │  (loop up to 3×)
-                           ▼
-                    ┌─────────────┐
-                    │  Agent 2    │  ← GPT OSS 120B (via OpenRouter)
-                    │ [Verifier]  │    Checks: LaTeX valid? JD match?
-                    └──────┬──────┘    Experience relevant? One page?
-                     ✅pass│ ❌fail → feedback → Agent 1
-                           ▼
-                    Final curated LaTeX (ONE page)
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │   LLM 3     │  ← Mistral Small
-                    │  [Polisher] │    Final formatting fix
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │  MCP Tool   │  ← FastMCP server
-                    │ [PDF Build] │    latexonline.cc / pdflatex
-                    └──────┬──────┘
-                           ▼
-                    ✅ final_resume.pdf
-```
+| Feature | v1 (Streamlit) | v2 (FastAPI + React) |
+|---|---|---|
+| Architecture | Monolithic | Decoupled full-stack |
+| UI | Streamlit widgets | React 18 + Tailwind split-screen editor |
+| Auth | Session cookie | JWT access + refresh tokens |
+| Database | Synchronous PyMongo | Async Motor + MongoDB 7 |
+| AI Pipeline | Synchronous | Fully async, multi-agent |
+| Templates | 3 (classic, modern, minimal) | 4 production LaTeX templates |
+| ATS Auditor | Basic | Structured 4-dimension scoring |
+| Offline mode | None | ✅ Full deterministic fallbacks |
+| Deployment | Streamlit Cloud | Docker Compose / GitHub Actions |
 
 ---
 
-## 📦 Project Structure
+## 🏗️ Architecture
 
 ```
 resume-builder/
-├── app.py                          # Streamlit main entry point
-├── requirements.txt
-├── .env.example                    # Environment variables template
-├── .streamlit/
-│   └── config.toml                 # Streamlit theme & server config
-│
-├── config/
-│   └── settings.py                 # Pydantic settings (all config in one place)
-│
-├── auth/
-│   └── auth.py                     # bcrypt + JWT auth, profile CRUD
-│
-├── database/
-│   ├── connection.py               # PyMongo connection pool
-│   └── models.py                   # Pydantic document models
-│
-├── agents/
-│   ├── agent1_generator.py         # Agent 1 — Groq (Grok/Qwen)
-│   ├── agent2_verifier.py          # Agent 2 — GPT OSS 120B (OpenRouter)
-│   ├── llm3_compiler.py            # LLM 3 — Mistral Small
-│   └── pipeline.py                 # Orchestrator (runs the full loop)
-│
-├── mcp/
-│   ├── latex_pdf_server.py         # FastMCP server with PDF tools
-│   └── mcp_client.py               # In-process client wrapper
-│
-├── templates/
-│   ├── template_classic.py         # Classic professional LaTeX skeleton
-│   ├── template_modern.py          # Modern two-column skeleton
-│   └── template_minimal.py         # Minimal ATS-friendly skeleton
-│
-├── pages/
-│   ├── 1_🔐_Login.py
-│   ├── 2_👤_Profile.py             # Internal details (stored once)
-│   ├── 3_📝_Generate_Resume.py     # Main generation page
-│   ├── 4_📚_History.py             # Resume history
-│   └── 5_⚙️_Settings.py
-│
-└── utils/
-    └── ui_helpers.py               # CSS design system & UI components
+├── backend/                 # FastAPI (Python 3.11)
+│   └── app/
+│       ├── core/            # Config, DB, Security
+│       ├── models/          # Pydantic v2 schemas
+│       ├── routers/         # Auth, Profiles, Resumes, Agents
+│       ├── agents/          # Multi-agent AI pipeline
+│       └── services/        # LaTeX templates, PDF service
+├── frontend/                # React 18 + Vite + TypeScript + Tailwind
+│   └── src/
+│       ├── api/             # Axios client with auto-refresh
+│       ├── store/           # Zustand state management
+│       ├── pages/           # Landing, Login, Register, Dashboard, Editor
+│       ├── components/      # Navbar, FormEditor, AIAgentPanel, Templates
+│       └── __tests__/       # Vitest unit tests
+├── docker-compose.yml       # Production Docker stack
+├── run.bat / run.sh         # One-command dev startup
+└── .github/workflows/ci.yml # GitHub Actions CI/CD
 ```
+
+---
+
+## 🤖 Multi-Agent AI Pipeline
+
+```
+User input (JD + Profile)
+        ↓
+  Template Selector          ← auto-selects best template
+        ↓
+  Agent 1 — Generator        ← Groq llama-3.3-70b
+        ↓
+  Agent 2 — Verifier  ←──── Loop up to 3× until score ≥ 80/100
+  (OpenRouter 405B)
+        ↓
+  PDF Compiler               ← latexonline.cc / local pdflatex
+        ↓
+  MongoDB persist            ← cache LaTeX + PDF
+```
+
+**Deterministic fallbacks** guarantee the app works without any API keys.
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Prerequisites
+### Option A — One command (recommended)
 
-- **Python 3.11+**
-- **MongoDB** running locally (`mongodb://localhost:27017`) or a MongoDB Atlas URI
-- (Optional) **pdflatex** on PATH for local PDF compilation — otherwise uses `latexonline.cc`
+**Windows:**
+```bat
+run.bat
+```
 
-### 2. Clone & Install
-
+**macOS / Linux:**
 ```bash
-git clone https://github.com/your-org/resume-builder.git
-cd resume-builder
+chmod +x run.sh && ./run.sh
+```
+
+This automatically:
+- Creates a Python virtual environment
+- Installs all backend + frontend dependencies
+- Copies `.env.example` → `.env`
+- Starts both servers concurrently
+
+### Option B — Manual
+
+**Backend:**
+```bash
+cd backend
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-
+# Windows: .venv\Scripts\activate
+# Unix:    source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env   # Add your API keys
+uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Configure `.env`
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+**URLs:**
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| Swagger UI | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
+
+---
+
+## 🐳 Docker Compose (Production)
 
 ```bash
-cp .env.example .env
+# Copy and configure env
+cp backend/.env.example backend/.env
+# Edit backend/.env with your API keys
+
+# Start full stack
+docker compose up --build
+
+# App: http://localhost:3000
+# API: http://localhost:8000
 ```
 
-Edit `.env` and fill in your API keys:
+---
+
+## ⚙️ Environment Variables
+
+Create `backend/.env` from `backend/.env.example`:
 
 ```env
+# MongoDB (required)
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DB_NAME=resume_builder
 
-JWT_SECRET_KEY=some-random-secret-32-chars
+# JWT (required — change in production!)
+JWT_SECRET_KEY=your-super-secret-key
 
-# Agent 1 — Groq (supports Llama/Qwen/Gemma models)
+# AI — Agent 1: Groq (optional — app works without it)
 GROQ_API_KEY=gsk_...
 AGENT1_MODEL=llama-3.3-70b-versatile
 
-# Agent 2 — OpenRouter (GPT OSS 120B class)
+# AI — Agent 2: OpenRouter (optional)
 OPENROUTER_API_KEY=sk-or-...
 AGENT2_MODEL=meta-llama/llama-3.1-405b-instruct
 
-# LLM 3 — Mistral AI
-MISTRALAI_API_KEY=...
-LLM3_MODEL=mistral-small-latest
-
-# LaTeX backend: "latexonline" (no install) or "local" (pdflatex required)
-LATEX_BACKEND=latexonline
+# PDF Backend
+LATEX_BACKEND=latexonline   # or: local (requires pdflatex)
 ```
 
-### 4. Run
-
-```bash
-streamlit run app.py
-```
-
-Visit **http://localhost:8501** → Register → Fill Profile → Generate!
+> **No API keys?** The app runs in **fallback mode** — deterministic heuristics handle all AI tasks.
 
 ---
 
-## 🔑 API Keys
+## 📋 API Reference
 
-| Key | Where to get it | Used by |
+### Auth
+| Method | Endpoint | Description |
 |---|---|---|
-| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com) | Agent 1 |
-| `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) | Agent 2 |
-| `MISTRALAI_API_KEY` | [console.mistral.ai](https://console.mistral.ai) | LLM 3 |
+| `POST` | `/api/v1/auth/register` | Register new user |
+| `POST` | `/api/v1/auth/login` | Login → JWT tokens |
+| `POST` | `/api/v1/auth/refresh` | Refresh access token |
+| `GET`  | `/api/v1/auth/me` | Current user info |
+
+### Profiles
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET`  | `/api/v1/profiles/me` | Get/auto-create profile |
+| `PUT`  | `/api/v1/profiles/me` | Update profile fields |
+
+### Resumes
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET`  | `/api/v1/resumes` | List resumes (paginated) |
+| `POST` | `/api/v1/resumes` | Create + run AI pipeline |
+| `GET`  | `/api/v1/resumes/{id}` | Get resume detail |
+| `PUT`  | `/api/v1/resumes/{id}` | Update resume |
+| `DELETE` | `/api/v1/resumes/{id}` | Delete resume |
+| `POST` | `/api/v1/resumes/{id}/duplicate` | Clone resume |
+| `POST` | `/api/v1/resumes/{id}/export/pdf` | Export as PDF |
+
+### AI Agents
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/agents/rewrite-bullet` | XYZ bullet rewriter |
+| `POST` | `/api/v1/agents/ats-audit` | ATS compliance score |
+| `POST` | `/api/v1/agents/tailor-to-jd` | JD gap analysis |
+| `POST` | `/api/v1/agents/generate-summary` | Executive summary |
+| `GET`  | `/api/v1/agents/models` | Model status |
 
 ---
 
-## 🤖 Agent Models
+## 🎨 Resume Templates
 
-| Agent | Default Model | Provider | Notes |
-|---|---|---|---|
-| Agent 1 | `llama-3.3-70b-versatile` | Groq | Change to `qwen-qwq-32b` or any Groq model |
-| Agent 2 | `meta-llama/llama-3.1-405b-instruct` | OpenRouter | 405B = ~120B active params (MoE) |
-| LLM 3 | `mistral-small-latest` | Mistral AI | Final polish & compilation |
+| Template | Style | Best For |
+|---|---|---|
+| `executive` | ATS Monochrome (Jake's Resume) | Corporate & engineering |
+| `modern` | Tech Minimal | Startups & FAANG |
+| `classic` | Harvard Serif Academic | Research & finance |
+| `compact` | Two-Column Dense | Senior engineers |
 
 ---
 
-## 📎 MCP Server
+## 🧪 Testing
 
-The MCP server (`mcp/latex_pdf_server.py`) exposes two tools:
-
-| Tool | Description |
-|---|---|
-| `generate_pdf_from_latex` | Compiles LaTeX → PDF (latexonline or local pdflatex) |
-| `validate_latex_syntax` | Quick structural check of LaTeX source |
-
-Run standalone:
+**Backend:**
 ```bash
-python mcp/latex_pdf_server.py
+cd backend
+pip install pytest pytest-asyncio httpx
+pytest tests/ -v
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm test
 ```
 
 ---
 
-## 👤 Internal Profile Fields
+## 📦 Tech Stack
 
-Stored **once** at registration, editable anytime from the Profile page:
-
-- **Personal**: name, email, phone, location
-- **Online**: LinkedIn, GitHub, LeetCode, Codeforces, portfolio, Kaggle, Twitter, custom links
-- **Professional Summary**
-- **Experience**: company, role, duration, location, bullet points
-- **Education**: institution, degree, field, GPA, duration
-- **Projects**: name, tech stack, duration, link, bullets
-- **Certifications & Achievements**
-- **Skills & Languages**
-
----
-
-## 🗄 MongoDB Collections
-
-| Collection | Purpose |
+| Layer | Technology |
 |---|---|
-| `users` | Auth credentials |
-| `profiles` | Internal profile details |
-| `history` | Resume generation history (LaTeX + PDF) |
-
----
-
-## 🤝 Contributing
-
-See [CONTRIBUTE.md](CONTRIBUTE.md).
+| Backend | FastAPI 0.115 · Python 3.11 · Pydantic v2 |
+| Database | MongoDB 7 · Motor 3 (async) |
+| Auth | JWT (HS256) · bcrypt |
+| AI LLMs | Groq (llama-3.3-70b) · OpenRouter (llama-3.1-405b) |
+| PDF | LaTeX → latexonline.cc or local pdflatex |
+| Frontend | React 18 · Vite 5 · TypeScript 5 · Tailwind CSS 3 |
+| State | Zustand 5 |
+| Tests | pytest-asyncio · Vitest |
+| CI/CD | GitHub Actions → GHCR Docker images |
+| Containers | Docker · Docker Compose |
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
+MIT © 2024 Rahul Kate

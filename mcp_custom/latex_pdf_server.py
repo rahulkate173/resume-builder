@@ -26,7 +26,7 @@ settings = get_settings()
 mcp = FastMCP(
     name="latex-pdf-generator",
     version="1.0.0",
-    description=(
+    instructions=(
         "MCP server for compiling LaTeX source code to PDF. "
         "Supports latexonline.cc backend and local pdflatex."
     ),
