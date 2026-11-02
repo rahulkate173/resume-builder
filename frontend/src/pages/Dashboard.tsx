@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Upload, Trash2, Copy, FileText, Loader2, Target, Cpu } from 'lucide-react'
+import { Plus, Trash2, Copy, FileText, Loader2, Target, Cpu, Sparkles, BrainCircuit, ArrowRight, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { resumeApi } from '@/api/client'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useResumeStore } from '@/store/useResumeStore'
-import clsx from 'clsx'
 
 interface ResumeListItem {
   id: string; title: string; job_role: string; company: string
@@ -33,7 +32,7 @@ export default function Dashboard() {
       const { data } = await resumeApi.list()
       setResumes(data)
     } catch {
-      // Guest mode: show empty state
+      toast.error('Failed to load resumes.')
     } finally {
       setLoading(false)
     }
@@ -85,9 +84,74 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleNew} id="new-resume-btn" className="btn-primary">
-              <Plus className="w-4 h-4" /> New Resume
+            <button onClick={handleNew} id="new-resume-btn" className="btn-ghost text-xs">
+              <Plus className="w-4 h-4" /> New
             </button>
+            <button
+              id="upload-resume-btn"
+              onClick={() => navigate('/upload-resume')}
+              className="btn-secondary text-xs"
+            >
+              <Upload className="w-4 h-4" /> Upload Resume
+            </button>
+            <button
+              id="jd-resume-btn"
+              onClick={() => navigate('/jd-resume')}
+              className="btn-primary"
+            >
+              <BrainCircuit className="w-4 h-4" /> Create with JD
+            </button>
+          </div>
+        </div>
+
+        {/* ── Feature Cards Row ─────────────────────────────────────────── */}
+        <div className="grid sm:grid-cols-2 gap-4 mb-8">
+          {/* JD Resume */}
+          <div
+            onClick={() => navigate('/jd-resume')}
+            className="relative cursor-pointer rounded-xl border border-violet-500/25
+                       bg-gradient-to-br from-violet-950/40 via-[#09090B] to-cyan-950/30
+                       p-5 flex items-start gap-4 hover:border-violet-500/50
+                       hover:shadow-[0_0_24px_rgba(139,92,246,0.1)] transition-all duration-300 group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/30
+                            flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+              <Sparkles className="w-5 h-5 text-violet-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="font-bold text-white text-sm">Create with Job Description</h2>
+                <span className="text-[10px] font-mono bg-violet-500/10 text-violet-400 border border-violet-500/20 px-1.5 py-0.5 rounded-full">AI</span>
+              </div>
+              <p className="text-zinc-500 text-xs leading-relaxed">
+                Paste a JD — 7 agents research, generate &amp; review your resume.
+              </p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-violet-400 group-hover:translate-x-1 transition-all flex-shrink-0 mt-0.5" />
+          </div>
+
+          {/* Upload Resume */}
+          <div
+            onClick={() => navigate('/upload-resume')}
+            className="relative cursor-pointer rounded-xl border border-emerald-500/20
+                       bg-gradient-to-br from-emerald-950/30 via-[#09090B] to-cyan-950/20
+                       p-5 flex items-start gap-4 hover:border-emerald-500/40
+                       hover:shadow-[0_0_24px_rgba(16,185,129,0.08)] transition-all duration-300 group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30
+                            flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+              <Upload className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="font-bold text-white text-sm">Import Existing Resume</h2>
+                <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">NEW</span>
+              </div>
+              <p className="text-zinc-500 text-xs leading-relaxed">
+                Upload a PDF — AI extracts your profile automatically.
+              </p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all flex-shrink-0 mt-0.5" />
           </div>
         </div>
 

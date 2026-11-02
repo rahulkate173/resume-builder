@@ -7,6 +7,8 @@ import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import Dashboard from '@/pages/Dashboard'
 import Editor from '@/pages/Editor'
+import JDResumePage from '@/pages/JDResumePage'
+import UploadResumePage from '@/pages/UploadResumePage'
 import Navbar from '@/components/Navbar'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -41,9 +43,11 @@ export default function App() {
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
 
         {/* Protected */}
-        <Route path="/dashboard" element={<PrivateRoute><><Navbar /><Dashboard /></></PrivateRoute>} />
-        <Route path="/editor/:id" element={<PrivateRoute><><Navbar /><Editor /></></PrivateRoute>} />
-        <Route path="/editor/new" element={<PrivateRoute><><Navbar /><Editor /></></PrivateRoute>} />
+        <Route path="/dashboard"       element={<PrivateRoute><><Navbar /><Dashboard /></></PrivateRoute>} />
+        <Route path="/editor/:id"      element={<PrivateRoute><><Navbar /><Editor /></></PrivateRoute>} />
+        <Route path="/editor/new"      element={<PrivateRoute><><Navbar /><Editor /></></PrivateRoute>} />
+        <Route path="/jd-resume"       element={<PrivateRoute><><Navbar /><JDResumePage /></></PrivateRoute>} />
+        <Route path="/upload-resume"   element={<PrivateRoute><><Navbar /><UploadResumePage /></></PrivateRoute>} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />

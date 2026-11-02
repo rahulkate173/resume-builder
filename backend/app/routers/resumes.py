@@ -17,7 +17,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.resume import ResumeCreateRequest, ResumeListItem, ResumeUpdateRequest
 from app.agents.pipeline import run_pipeline
-from app.services.pdf_service import compile_latex_to_pdf
+from app.services.pdf_service import compile_latex_to_pdf, generate_pdf_from_resume_doc
 
 router = APIRouter(prefix="/api/v1/resumes", tags=["resumes"])
 
@@ -205,6 +205,12 @@ async def export_pdf(
     resume_id: str,
     current_user: dict = Depends(get_current_user),
 ):
+    """
+    Export resume as PDF.
+    Tier 1: cached pdf_base64  (instant)
+    Tier 2: recompile LaTeX online (ytotech → latexonline)
+    Tier 3: reportlab from profile data  (always works, no external deps)
+    """
     db = get_db()
     try:
         doc = await db.resumes.find_one(
@@ -216,25 +222,40 @@ async def export_pdf(
     if not doc:
         raise HTTPException(status_code=404, detail="Resume not found.")
 
-    # Try cached PDF first
+    # ── Tier 1: cached PDF ────────────────────────────────────────────────────
     if doc.get("pdf_base64"):
         pdf_bytes = base64.b64decode(doc["pdf_base64"])
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=resume_{resume_id}.pdf"},
+            headers={"Content-Disposition": f'attachment; filename="resume_{resume_id}.pdf"'},
         )
 
-    # Recompile from LaTeX
+    # ── Tier 2: recompile LaTeX ───────────────────────────────────────────────
     latex = doc.get("latex_output", "")
-    if not latex:
-        raise HTTPException(status_code=422, detail="No LaTeX source available for this resume.")
+    if latex:
+        success, pdf_bytes, _ = await compile_latex_to_pdf(latex)
+        if success and pdf_bytes:
+            await db.resumes.update_one(
+                {"_id": ObjectId(resume_id)},
+                {"$set": {"pdf_base64": base64.b64encode(pdf_bytes).decode()}},
+            )
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="resume_{resume_id}.pdf"'},
+            )
 
-    success, pdf_bytes, error = await compile_latex_to_pdf(latex)
+    # ── Tier 3: reportlab from structured profile data ────────────────────────
+    profile = await db.profiles.find_one({"user_id": current_user["sub"]}) or {}
+    profile.pop("_id", None)
+    doc_clean = {k: v for k, v in doc.items() if k != "_id"}
+
+    success, pdf_bytes, err = await generate_pdf_from_resume_doc(doc_clean, profile)
     if not success or not pdf_bytes:
-        raise HTTPException(status_code=500, detail=f"PDF compilation failed: {error}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {err}")
 
-    # Cache the result
+    # Cache so subsequent downloads are instant
     await db.resumes.update_one(
         {"_id": ObjectId(resume_id)},
         {"$set": {"pdf_base64": base64.b64encode(pdf_bytes).decode()}},
@@ -243,5 +264,5 @@ async def export_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=resume_{resume_id}.pdf"},
+        headers={"Content-Disposition": f'attachment; filename="resume_{resume_id}.pdf"'},
     )

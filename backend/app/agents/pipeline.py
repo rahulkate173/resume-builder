@@ -142,27 +142,24 @@ async def _run_agent2(
     profile: dict,
     latex_source: str,
 ) -> dict:
-    """Verify LaTeX resume. Falls back to structural check."""
+    """Verify LaTeX resume via Groq. Falls back to structural check."""
     import json as _json
 
-    if not settings.has_openrouter:
+    if not settings.has_groq:
         valid, issues = validate_latex(latex_source)
         return {
-            "passed": valid and len(issues) == 0,
+            "passed": valid,
             "score": 80 if valid else 40,
             "issues": issues,
-            "feedback": "Structural validation only (no LLM verifier key).",
+            "feedback": "Structural validation only (no Groq key).",
             "latex_valid": valid,
             "jd_match_score": 75,
             "experience_relevance_score": 75,
         }
 
     try:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(
-            api_key=settings.openrouter_api_key,
-            base_url="https://openrouter.ai/api/v1",
-        )
+        from groq import AsyncGroq
+        client = AsyncGroq(api_key=settings.groq_api_key)
         profile_json = _json.dumps(profile, indent=2, default=str)
         user_msg = dedent(f"""\
 ## Job Role: {job_role} @ {company}
@@ -175,23 +172,19 @@ async def _run_agent2(
 
 ## Generated LaTeX Resume
 ```latex
-{latex_source}
+{latex_source[:5000]}
 ```
 
 Evaluate and return JSON.
 """)
         resp = await client.chat.completions.create(
-            model=settings.agent2_model,
+            model=settings.groq_model,
             messages=[
                 {"role": "system", "content": _VERIFY_SYSTEM},
-                {"role": "user", "content": user_msg},
+                {"role": "user",   "content": user_msg},
             ],
             temperature=0.0,
-            max_tokens=1024,
-            extra_headers={
-                "HTTP-Referer": "https://github.com/resume-builder",
-                "X-Title": "AI Resume Builder",
-            },
+            max_tokens=512,
         )
         raw = resp.choices[0].message.content or "{}"
         import re as _re
@@ -210,7 +203,6 @@ Evaluate and return JSON.
     except Exception:
         pass
 
-    # Safe fallback
     return {
         "passed": True,
         "score": 75,

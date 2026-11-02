@@ -18,7 +18,7 @@ export default function AIAgentPanel({ onClose, pipelineLog }: { onClose: () => 
   const [diffs, setDiffs] = useState<DiffCard[]>([])
   const [bulletInput, setBulletInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [summaryResult, setSummaryResult] = useState('')
+  const [_summaryResult, setSummaryResult] = useState('')
   const [atsResult, setAtsResult] = useState<any>(null)
 
   const addStep = (step: string, status: AgentStepUI['status'], message = '') =>

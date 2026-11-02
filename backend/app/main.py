@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.database import ping, shutdown, startup
 from app.routers import auth, profiles, resumes, agents
+from app.routers import jd_resume
 
 settings = get_settings()
 
@@ -98,6 +99,7 @@ app.include_router(auth.router)
 app.include_router(profiles.router)
 app.include_router(resumes.router)
 app.include_router(agents.router)
+app.include_router(jd_resume.router)
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

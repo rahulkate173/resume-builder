@@ -101,14 +101,6 @@ export default function Login() {
             Create one
           </Link>
         </p>
-
-        {/* Demo mode */}
-        <div className="mt-6 card p-4 text-center">
-          <p className="text-xs text-zinc-500 mb-2">Just exploring?</p>
-          <Link to="/dashboard" className="btn-secondary text-xs py-1.5 px-3">
-            Continue as Guest (Demo Mode)
-          </Link>
-        </div>
       </div>
     </div>
   )

@@ -51,6 +51,14 @@ export const authApi = {
 export const profileApi = {
   get: () => api.get('/profiles/me'),
   update: (data: Record<string, unknown>) => api.put('/profiles/me', data),
+  parseResume: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/profiles/parse-resume', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60_000,
+    })
+  },
 }
 
 // ── Resumes ───────────────────────────────────────────────────────────────────
@@ -83,4 +91,85 @@ export const healthApi = {
   check: () => api.get('/health'),
 }
 
+// ── JD Resume (Agentic pipeline) ──────────────────────────────────────────────
+export const jdResumeApi = {
+  /**
+   * Generate resume with JD using 7-agent pipeline.
+   * Returns an EventSource-compatible URL for SSE progress.
+   * The caller should use fetch() with the auth token for SSE.
+   */
+  generate: (jobRole: string, company: string, jobDescription: string, templateKey = 'classic') =>
+    api.post('/jd-resume/generate', {
+      job_role: jobRole,
+      company,
+      job_description: jobDescription,
+      template_key: templateKey,
+    }, {
+      // Stream the response
+      responseType: 'stream',
+      timeout: 180_000, // 3 min for full pipeline
+    }),
+
+  /**
+   * Low-level fetch with SSE streaming — preferred for progress UI.
+   * Returns an AbortController for cancellation + AsyncIterable of step objects.
+   */
+  streamGenerate: async (
+    jobRole: string,
+    company: string,
+    jobDescription: string,
+    onStep: (step: Record<string, unknown>) => void,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>> => {
+    const token = useAuthStore.getState().token
+    const resp = await fetch('/api/v1/jd-resume/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ job_role: jobRole, company, job_description: jobDescription }),
+      signal,
+    })
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+      throw new Error(err.detail || 'JD pipeline failed')
+    }
+
+    const reader = resp.body?.getReader()
+    const decoder = new TextDecoder()
+    let finalResult: Record<string, unknown> = {}
+
+    if (!reader) throw new Error('No response body')
+
+    try {
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const step = JSON.parse(line.slice(6))
+              if (step.type === 'done' || step.type === 'error') {
+                finalResult = step
+              }
+              onStep(step)
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    return finalResult
+  },
+}
+
 export default api
+

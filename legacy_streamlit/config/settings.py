@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # ── Agent 1 (Grok / Qwen via Groq) ───────────────────────────────────────
     groq_api_key: str = ""
-    agent1_model: str = "llama-3.3-70b-versatile"
+    agent1_model: str = "qwen/qwen3.8-27b"
 
     # ── Agent 2 (OSS 120B via OpenRouter) ────────────────────────────────────
     groq_api_key: str = ""
