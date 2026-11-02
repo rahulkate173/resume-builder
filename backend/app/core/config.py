@@ -42,17 +42,17 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24  # 24 hours
     jwt_refresh_expire_days: int = 7
 
-    # ── Agent 1 — Groq ────────────────────────────────────────────────────
+    # ── Groq (single LLM provider for all agents) ─────────────────────────
     groq_api_key: Optional[str] = None
-    agent1_model: str = "llama-3.3-70b-versatile"
+    groq_model:   str = "qwen/qwen3.8-27b"
+    # backwards-compat aliases
+    agent1_model: str = "qwen/qwen3.8-27b"
 
-    # ── Agent 2 — OpenRouter ───────────────────────────────────────────────
-    openrouter_api_key: Optional[str] = None
-    agent2_model: str = "meta-llama/llama-3.1-405b-instruct"
+    # ── Tavily (Web Search Agent) ─────────────────────────────────────────
+    tavily_api_key: Optional[str] = None
 
-    # ── LLM 3 — Mistral / Groq ────────────────────────────────────────────
-    mistralai_api_key: Optional[str] = None
-    llm3_model: str = "mistral-small-latest"
+    # ── GitHub (Repo Fetch Agent) ─────────────────────────────────────────
+    github_token: Optional[str] = None
 
     # ── PDF / LaTeX backend ────────────────────────────────────────────────
     latex_backend: str = "latexonline"
@@ -67,12 +67,21 @@ class Settings(BaseSettings):
         return bool(self.groq_api_key)
 
     @property
-    def has_openrouter(self) -> bool:
-        return bool(self.openrouter_api_key)
+    def has_tavily(self) -> bool:
+        return bool(self.tavily_api_key)
+
+    @property
+    def has_github(self) -> bool:
+        return bool(self.github_token)
 
     @property
     def ai_available(self) -> bool:
         return self.has_groq
+
+    def groq_client(self):
+        """Return a configured AsyncGroq client."""
+        from groq import AsyncGroq
+        return AsyncGroq(api_key=self.groq_api_key)
 
 
 @lru_cache

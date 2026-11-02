@@ -88,7 +88,7 @@ interface ResumeStore {
   markClean: () => void
 }
 
-export const useResumeStore = create<ResumeStore>()((set, get) => ({
+export const useResumeStore = create<ResumeStore>()((set, _get) => ({
   resume: { ...defaultResumeData },
   isDirty: false,
   activeTab: 'personal',

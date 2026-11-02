@@ -91,7 +91,7 @@ export default function Landing() {
 
         {/* Social proof */}
         <div className="mt-10 flex items-center justify-center gap-6 text-xs text-zinc-600 animate-fade-in">
-          {['No credit card', 'Guest mode available', 'Export as PDF'].map((t) => (
+          {['No credit card', 'Free forever', 'Export as PDF'].map((t) => (
             <span key={t} className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-zinc-600" /> {t}
             </span>
@@ -153,13 +153,13 @@ export default function Landing() {
         <Shield className="w-8 h-8 text-zinc-600 mx-auto mb-4" />
         <h2 className="text-2xl font-bold mb-3">Ready to land your next role?</h2>
         <p className="text-zinc-500 text-sm mb-6">
-          Works without an account. Start building instantly, save when you're ready.
+          Create your free account and start building AI-powered resumes in minutes.
         </p>
         <Link to="/register" className="btn-primary text-base px-8 py-3 inline-flex">
           Create Free Account →
         </Link>
         <p className="mt-4 text-xs text-zinc-600">
-          Built on Groq · OpenRouter · LaTeX · FastAPI · MongoDB
+          Built on Groq · Tavily · GitHub API · LaTeX · FastAPI · MongoDB
         </p>
       </section>
     </div>

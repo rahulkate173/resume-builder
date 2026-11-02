@@ -4,19 +4,32 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-.env
 *.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Environment & Secrets — never commit these!
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 
 # Node
 node_modules/
 dist/
 .next/
 .nuxt/
+frontend/dist/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
 
 # OS
 .DS_Store
@@ -24,12 +37,22 @@ Thumbs.db
 
 # Docker
 *.log
-
-# Secrets
-.env.local
-.env.production
+docker-compose.override.yml
 
 # Test artifacts
 .pytest_cache/
 htmlcov/
 .coverage
+coverage.xml
+
+# LaTeX temp files
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
+*.out
+/tmp/
+
+# Generated agent output (not needed in git)
+backend/app/agents/__pycache__/
