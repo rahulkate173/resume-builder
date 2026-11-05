@@ -64,6 +64,9 @@ jobs:
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     needs: [backend-test, frontend-test]
     if: github.ref == 'refs/heads/main'
     steps:

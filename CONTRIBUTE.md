@@ -78,25 +78,26 @@ All contributions go through pull requests. See [Submitting a Pull Request](#sub
 
 ## Development Setup
 
+The project has a FastAPI backend and a React frontend. For the quickest setup,
+follow the [README Quick Start](./README.md#-quick-start).
+
+For manual setup:
+
 ```bash
-# 1. Create virtual environment
+# Backend (run from the repository root)
+cd backend
 python -m venv .venv
 .venv\Scripts\activate     # Windows
 source .venv/bin/activate  # macOS/Linux
-
-# 2. Install dependencies
 pip install -r requirements.txt
-pip install ruff black mypy   # dev tools
+copy .env.example .env     # Windows; use cp on macOS/Linux
+# Edit .env with your keys, start MongoDB, then run:
+uvicorn app.main:app --reload --port 8000
 
-# 3. Copy env
-cp .env.example .env
-# Edit .env with your keys
-
-# 4. Start MongoDB (Docker example)
-docker run -d -p 27017:27017 --name mongo mongo:7
-
-# 5. Run the app
-streamlit run app.py
+# In a second terminal
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
@@ -104,15 +105,10 @@ streamlit run app.py
 ## Project Structure
 
 ```
-agents/         ← AI agent modules (generator, verifier, compiler, pipeline)
-auth/           ← Authentication (bcrypt + JWT)
-config/         ← Centralised settings via pydantic-settings
-database/       ← MongoDB connection + Pydantic document models
-mcp/            ← FastMCP server for LaTeX→PDF + in-process client
-pages/          ← Streamlit multipage pages
-templates/      ← Built-in LaTeX resume skeletons
-utils/          ← UI helpers, CSS design system
-app.py          ← Streamlit main entry point
+backend/app/    ← FastAPI routes, models, agents, and services
+backend/tests/  ← Backend pytest suite
+frontend/src/   ← React application and Vitest tests
+.github/        ← GitHub Actions workflows
 ```
 
 ---
@@ -127,14 +123,14 @@ app.py          ← Streamlit main entry point
 - **Docstrings**: Google-style for modules and public functions
 
 ```bash
-# Format
-black .
+# Backend tests
+cd backend
+python -m pytest tests/ -v
 
-# Lint
-ruff check .
-
-# Type check
-mypy agents/ auth/ config/ database/ mcp/ utils/
+# Frontend checks
+cd frontend
+npx tsc --noEmit
+npm test
 ```
 
 ### Commit Messages
@@ -144,7 +140,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat: add new template for data-science roles
 fix: handle missing profile gracefully in agent1
-docs: update README with OpenRouter setup
+docs: update README with Groq setup
 refactor: extract PDF compilation to separate helper
 ```
 
@@ -189,23 +185,9 @@ PRs are merged with **squash & merge** to keep history clean.
 
 ## Adding New Templates
 
-1. Create `templates/template_yourname.py` with a `YOURNAME_TEMPLATE` string constant.
-   - Use `{{PLACEHOLDER}}` tokens consistent with the existing templates.
-   - Ensure the template produces a one-page document with typical resume content.
-
-2. Register it in `templates/__init__.py`:
-   ```python
-   from templates.template_yourname import YOURNAME_TEMPLATE
-
-   BUILTIN_TEMPLATES["yourname"] = {
-       "name": "Your Template Name",
-       "description": "Short description.",
-       "preview_color": "#hexcolor",
-       "template": YOURNAME_TEMPLATE,
-   }
-   ```
-
-3. Test with the UI: select it from the Generate Resume page.
+1. Add the LaTeX template to `backend/app/services/latex_templates.py`.
+2. Register it with the existing template lookup helpers.
+3. Add or update tests for the template and its use in the backend.
 
 ---
 
@@ -213,25 +195,22 @@ PRs are merged with **squash & merge** to keep history clean.
 
 ### Change Agent 1 model (Groq-compatible)
 
-Edit `.env`:
+Edit `backend/.env`:
 ```env
 AGENT1_MODEL=qwen-qwq-32b
 # or any model available at console.groq.com
 ```
 
-### Change Agent 2 model (OpenRouter-compatible)
+### Change Agent 2 model
 
-```env
-AGENT2_MODEL=mistralai/mistral-large-2411
-# or any model at openrouter.ai/models
-```
+Agent 2 uses the same Groq model configured by `AGENT1_MODEL`.
 
 ### Add a new LLM provider
 
-1. Add the client library to `requirements.txt`.
-2. Add config keys to `config/settings.py`.
-3. Create or update the relevant agent module in `agents/`.
-4. Update `.env.example` with the new keys.
+1. Add the client library to `backend/requirements.txt`.
+2. Add config keys to `backend/app/core/config.py`.
+3. Create or update the relevant agent module in `backend/app/agents/`.
+4. Update `backend/.env.example` with the new keys.
 
 ---
 

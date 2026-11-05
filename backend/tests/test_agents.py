@@ -100,5 +100,7 @@ async def test_models_status(client, auth_headers):
     assert resp.status_code == 200
     body = resp.json()
     assert "agent1" in body
+    assert body["agent2"]["provider"] == "Groq"
+    assert body["agent2"]["model"]
     assert "fallback" in body
     assert body["fallback"]["available"] is True

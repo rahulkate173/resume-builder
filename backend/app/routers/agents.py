@@ -199,9 +199,9 @@ async def get_model_status(current_user: dict = Depends(get_current_user)):
             "available": settings.has_groq,
         },
         "agent2": {
-            "model": settings.agent2_model,
-            "provider": "OpenRouter",
-            "available": settings.has_openrouter,
+            "model": settings.groq_model,
+            "provider": "Groq",
+            "available": settings.has_groq,
         },
         "fallback": {
             "mode": "deterministic",

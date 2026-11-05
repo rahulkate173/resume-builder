@@ -6,19 +6,13 @@
 
 ---
 
-## ✨ What's New in v2
+## ✨ Features
 
-| Feature | v1 (Streamlit) | v2 (FastAPI + React) |
-|---|---|---|
-| Architecture | Monolithic | Decoupled full-stack |
-| UI | Streamlit widgets | React 18 + Tailwind split-screen editor |
-| Auth | Session cookie | JWT access + refresh tokens |
-| Database | Synchronous PyMongo | Async Motor + MongoDB 7 |
-| AI Pipeline | Synchronous | Fully async, multi-agent |
-| Templates | 3 (classic, modern, minimal) | 4 production LaTeX templates |
-| ATS Auditor | Basic | Structured 4-dimension scoring |
-| Offline mode | None | ✅ Full deterministic fallbacks |
-| Deployment | Streamlit Cloud | Docker Compose / GitHub Actions |
+- Decoupled FastAPI backend and React frontend.
+- JWT authentication and MongoDB-backed profiles and resumes.
+- Multi-agent Groq resume generation, verification, and ATS auditing.
+- LaTeX templates with deterministic fallbacks when AI is unavailable.
+- Docker Compose deployment and GitHub Actions CI.
 
 ---
 
@@ -57,7 +51,7 @@ User input (JD + Profile)
   Agent 1 — Generator        ← Groq llama-3.3-70b
         ↓
   Agent 2 — Verifier  ←──── Loop up to 3× until score ≥ 80/100
-  (OpenRouter 405B)
+  (Groq llama-3.3-70b)
         ↓
   PDF Compiler               ← latexonline.cc / local pdflatex
         ↓
@@ -150,9 +144,7 @@ JWT_SECRET_KEY=your-super-secret-key
 GROQ_API_KEY=gsk_...
 AGENT1_MODEL=llama-3.3-70b-versatile
 
-# AI — Agent 2: OpenRouter (optional)
-OPENROUTER_API_KEY=sk-or-...
-AGENT2_MODEL=meta-llama/llama-3.1-405b-instruct
+# Agent 2 uses the same Groq API key and model as Agent 1.
 
 # PDF Backend
 LATEX_BACKEND=latexonline   # or: local (requires pdflatex)
@@ -235,7 +227,7 @@ npm test
 | Backend | FastAPI 0.115 · Python 3.11 · Pydantic v2 |
 | Database | MongoDB 7 · Motor 3 (async) |
 | Auth | JWT (HS256) · bcrypt |
-| AI LLMs | Groq (llama-3.3-70b) · OpenRouter (llama-3.1-405b) |
+| AI LLMs | Groq (llama-3.3-70b) · Mistral (final polish) |
 | PDF | LaTeX → latexonline.cc or local pdflatex |
 | Frontend | React 18 · Vite 5 · TypeScript 5 · Tailwind CSS 3 |
 | State | Zustand 5 |
