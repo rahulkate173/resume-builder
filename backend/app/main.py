@@ -41,7 +41,7 @@ app = FastAPI(
 
 Production-grade resume builder with **multi-agent AI** pipeline:
 - **Agent 1** (Groq): LaTeX resume generation with JD tailoring
-- **Agent 2** (OpenRouter): Quality verification with structured scoring
+- **Agent 2** (Groq): Quality verification with structured scoring
 - **LLM 3** (Mistral/Groq): Final polish and PDF compilation
 
 ### Features

@@ -1,7 +1,6 @@
 """
 backend/app/agents/pipeline.py
 Async multi-agent resume generation pipeline.
-Migrated from legacy synchronous Streamlit pipeline.
 Flow: Template select → Agent1 Generate → Agent2 Verify (loop) → LLM3 Polish → PDF
 """
 
