@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # backwards-compat aliases
     agent1_model: str = "qwen/qwen3.8-27b"
 
+    # ── OpenRouter ───────────────────────────────────────────────────────────
+    openrouter_api_key: Optional[str] = None
+    agent2_model: str = "meta-llama/llama-3.1-405b-instruct"
+
     # ── Tavily (Web Search Agent) ─────────────────────────────────────────
     tavily_api_key: Optional[str] = None
 
@@ -65,6 +69,10 @@ class Settings(BaseSettings):
     @property
     def has_groq(self) -> bool:
         return bool(self.groq_api_key)
+
+    @property
+    def has_openrouter(self) -> bool:
+        return bool(self.openrouter_api_key)
 
     @property
     def has_tavily(self) -> bool:
