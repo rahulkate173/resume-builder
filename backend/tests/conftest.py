@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 from typing import AsyncGenerator
+import asyncio
 
 import pytest
 import pytest_asyncio
@@ -22,26 +23,26 @@ os.environ.setdefault("DEBUG", "true")
 from app.main import app
 from app.core.database import startup, shutdown, get_db
 
+from app.main import app
+from app.core.database import get_db# forcing it in one loop 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="session")
 async def db_setup():
     await startup()
+    
+    # Get the active database instance inside the session loop
+    database = get_db()
+    
     yield
-    # Clean up test DB
-    db = get_db()
-    await db.users.drop()
-    await db.profiles.drop()
-    await db.resumes.drop()
-    await db.agent_runs.drop()
+    
+    # Clean up test DB using the proper database instance
+    await database.users.drop()
+    await database.profiles.drop()
+    await database.resumes.drop()
+    await database.agent_runs.drop()
     await shutdown()
-
 
 @pytest_asyncio.fixture
 async def client(db_setup) -> AsyncGenerator[AsyncClient, None]:
