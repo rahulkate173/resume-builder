@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Upload, FileText, CheckCircle2, AlertCircle, Loader2,
+  Upload, FileText, CheckCircle2, Loader2,
   ChevronLeft, User, Briefcase, GraduationCap, Code2,
   Award, Wrench, ArrowRight, RefreshCw, Save
 } from 'lucide-react'
