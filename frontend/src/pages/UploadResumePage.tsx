@@ -243,7 +243,7 @@ export default function UploadResumePage() {
               <span className="text-sm font-medium text-white">AI is reading your resume…</span>
             </div>
             <div className="space-y-2">
-              {['Extracting text from PDF…', 'Identifying sections…', 'Parsing with Groq AI…', 'Structuring profile data…'].map((s, i) => (
+              {['Extracting text from PDF…', 'Identifying sections…', 'Parsing with Gemini AI…', 'Structuring profile data…'].map((s, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs text-zinc-500">
                   <div className="w-1.5 h-1.5 rounded-full bg-violet-500/50" />
                   {s}

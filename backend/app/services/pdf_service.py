@@ -22,6 +22,11 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
+def _is_pdf_response(resp: httpx.Response) -> bool:
+    """Accept successful HTTP statuses only when the body contains a PDF."""
+    return resp.is_success and b"%PDF-" in resp.content[:1024]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,8 +89,7 @@ async def _compile_ytotech(latex_source: str) -> tuple[bool, Optional[bytes], st
                     "resources": [{"main": True, "content": latex_source}],
                 },
             )
-            ct = resp.headers.get("content-type", "")
-            if resp.status_code == 200 and "application/pdf" in ct:
+            if _is_pdf_response(resp):
                 return True, resp.content, ""
             return False, None, f"ytotech HTTP {resp.status_code}: {resp.text[:150]}"
     except httpx.TimeoutException:
@@ -100,8 +104,7 @@ async def _compile_latexonline(latex_source: str) -> tuple[bool, Optional[bytes]
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, data={"code": latex_source})
-            ct = resp.headers.get("content-type", "")
-            if resp.status_code == 200 and "application/pdf" in ct:
+            if _is_pdf_response(resp):
                 return True, resp.content, ""
             return False, None, f"latexonline HTTP {resp.status_code}: {resp.text[:150]}"
     except httpx.TimeoutException:

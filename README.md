@@ -10,7 +10,7 @@
 
 - Decoupled FastAPI backend and React frontend.
 - JWT authentication and MongoDB-backed profiles and resumes.
-- Multi-agent Groq resume generation, verification, and ATS auditing.
+- LangGraph-orchestrated agent workflows using Gemini through LangChain.
 - LaTeX templates with deterministic fallbacks when AI is unavailable.
 - Docker Compose deployment and GitHub Actions CI.
 
@@ -48,10 +48,9 @@ User input (JD + Profile)
         ↓
   Template Selector          ← auto-selects best template
         ↓
-  Agent 1 — Generator        ← Groq llama-3.3-70b
+  Agent 1 — Generator        ← Gemini via LangChain
         ↓
-  Agent 2 — Verifier  ←──── Loop up to 3× until score ≥ 80/100
-  (Groq llama-3.3-70b)
+  Agent 2 — Verifier  ←──── LangGraph loop up to 3× until score ≥ 80/100
         ↓
   PDF Compiler               ← latexonline.cc / local pdflatex
         ↓
@@ -140,11 +139,9 @@ MONGODB_DB_NAME=resume_builder
 # JWT (required — change in production!)
 JWT_SECRET_KEY=your-super-secret-key
 
-# AI — Agent 1: Groq (optional — app works without it)
-GROQ_API_KEY=gsk_...
-AGENT1_MODEL=llama-3.3-70b-versatile
-
-# Agent 2 uses the same Groq API key and model as Agent 1.
+# Gemini via LangChain (optional — deterministic fallbacks are available)
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-2.5-flash
 
 # PDF Backend
 LATEX_BACKEND=latexonline   # or: local (requires pdflatex)
@@ -227,7 +224,7 @@ npm test
 | Backend | FastAPI 0.115 · Python 3.11 · Pydantic v2 |
 | Database | MongoDB 7 · Motor 3 (async) |
 | Auth | JWT (HS256) · bcrypt |
-| AI LLMs | Groq (llama-3.3-70b) · Mistral (final polish) |
+| AI LLMs | Gemini via LangChain · LangGraph workflows |
 | PDF | LaTeX → latexonline.cc or local pdflatex |
 | Frontend | React 18 · Vite 5 · TypeScript 5 · Tailwind CSS 3 |
 | State | Zustand 5 |

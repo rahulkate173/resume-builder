@@ -98,7 +98,7 @@ export const jdResumeApi = {
    * Returns an EventSource-compatible URL for SSE progress.
    * The caller should use fetch() with the auth token for SSE.
    */
-  generate: (jobRole: string, company: string, jobDescription: string, templateKey = 'classic') =>
+  generate: (jobRole: string, company: string, jobDescription: string, templateKey = 'executive') =>
     api.post('/jd-resume/generate', {
       job_role: jobRole,
       company,
@@ -128,7 +128,12 @@ export const jdResumeApi = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ job_role: jobRole, company, job_description: jobDescription }),
+      body: JSON.stringify({
+        job_role: jobRole,
+        company,
+        job_description: jobDescription,
+        template_key: 'executive',
+      }),
       signal,
     })
 
@@ -172,4 +177,3 @@ export const jdResumeApi = {
 }
 
 export default api
-

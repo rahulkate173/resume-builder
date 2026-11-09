@@ -27,6 +27,7 @@ EXECUTIVE_MONOCHROME = r"""
 \usepackage{tabularx}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
+\setlist[itemize]{topsep=1pt,itemsep=0pt,parsep=0pt,partopsep=0pt}
 \input{glyphtounicode}
 
 \pagestyle{fancy}
@@ -44,7 +45,7 @@ EXECUTIVE_MONOCHROME = r"""
 \raggedright
 \setlength{\tabcolsep}{0in}
 
-\titleformat{\section}{\vspace{-4pt}\scshape\raggedright\large}{}{0em}{}[\color{black}\titlerule\vspace{-5pt}]
+\titleformat{\section}{\vspace{-4pt}\bfseries\raggedright\large}{}{0em}{}[\color{black}\titlerule\vspace{-5pt}]
 \pdfgentounicode=1
 
 \newcommand{\resumeItem}[1]{\item\small{#1\vspace{-2pt}}}

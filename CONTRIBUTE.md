@@ -193,17 +193,15 @@ PRs are merged with **squash & merge** to keep history clean.
 
 ## Adding New Agent Models
 
-### Change Agent 1 model (Groq-compatible)
+### Change the Gemini model
 
 Edit `backend/.env`:
 ```env
-AGENT1_MODEL=qwen-qwq-32b
-# or any model available at console.groq.com
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-### Change Agent 2 model
-
-Agent 2 uses the same Groq model configured by `AGENT1_MODEL`.
+All agents use the shared Gemini model through LangChain. LangGraph defines
+the resume-generation and JD-tailoring workflows.
 
 ### Add a new LLM provider
 

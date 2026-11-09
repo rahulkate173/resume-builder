@@ -1,7 +1,7 @@
 """
 backend/app/agents/bullet_rewriter.py
 Impact & Action-Verb Rewriter Agent (STAR/XYZ Method).
-Uses Groq (primary) → Fallback (deterministic).
+Uses Gemini through LangChain (primary) → deterministic fallback.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from textwrap import dedent
 from typing import Any
 
 from app.core.config import get_settings
+from app.agents.llm import invoke_chat
 from app.models.agent import RewrittenBullet
 from app.agents.fallback import fallback_rewrite_bullet
 
@@ -48,13 +49,10 @@ async def rewrite_bullet(
     Rewrite a resume bullet using XYZ formula.
     Falls back to deterministic rewriter if API is unavailable.
     """
-    if not settings.has_groq:
+    if not settings.has_gemini:
         return fallback_rewrite_bullet(bullet=bullet, job_role=job_role)
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
-
         user_msg = dedent(f"""\
 Job Role: {job_role}
 Context: {context}
@@ -65,16 +63,12 @@ Original bullet:
 
 Rewrite using the XYZ formula. Return JSON only.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
+        raw = await invoke_chat(
+            _SYSTEM,
+            user_msg,
             temperature=0.4,
             max_tokens=256,
         )
-        raw = resp.choices[0].message.content or "{}"
         data = _parse_json(raw)
         return RewrittenBullet(
             original=bullet,
