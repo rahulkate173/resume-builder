@@ -1,8 +1,12 @@
 import axios from 'axios'
 import { useAuthStore } from '@/store/useAuthStore'
 
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || '/api/v1'
+).replace(/\/+$/, '')
+
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   timeout: 120_000,
   headers: { 'Content-Type': 'application/json' },
 })
@@ -24,7 +28,7 @@ api.interceptors.response.use(
       const refreshToken = useAuthStore.getState().refreshToken
       if (refreshToken) {
         try {
-          const { data } = await axios.post('/api/v1/auth/refresh', { refresh_token: refreshToken })
+          const { data } = await api.post('/auth/refresh', { refresh_token: refreshToken })
           useAuthStore.getState().setTokens(data.access_token, data.refresh_token)
           original.headers.Authorization = `Bearer ${data.access_token}`
           return api(original)
@@ -122,7 +126,7 @@ export const jdResumeApi = {
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>> => {
     const token = useAuthStore.getState().token
-    const resp = await fetch('/api/v1/jd-resume/generate', {
+    const resp = await fetch(`${API_BASE_URL}/jd-resume/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

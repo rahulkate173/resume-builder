@@ -8,6 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,6 +75,17 @@ class Settings(BaseSettings):
     @property
     def ai_available(self) -> bool:
         return self.has_gemini
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if not self.debug and (
+            len(self.jwt_secret_key) < 32
+            or self.jwt_secret_key == "change-me-in-production-supersecret-key"
+        ):
+            raise ValueError(
+                "JWT_SECRET_KEY must be a unique secret of at least 32 characters when DEBUG is false."
+            )
+        return self
 
 
 @lru_cache

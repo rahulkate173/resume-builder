@@ -136,8 +136,8 @@ Create `backend/.env` from `backend/.env.example`:
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DB_NAME=resume_builder
 
-# JWT (required — change in production!)
-JWT_SECRET_KEY=your-super-secret-key
+# JWT (required; generate a random 32+ character value and keep it backend-only)
+JWT_SECRET_KEY=<generated-secret>
 
 # Gemini via LangChain (optional — deterministic fallbacks are available)
 GEMINI_API_KEY=your-gemini-api-key
@@ -148,6 +148,20 @@ LATEX_BACKEND=latexonline   # or: local (requires pdflatex)
 ```
 
 > **No API keys?** The app runs in **fallback mode** — deterministic heuristics handle all AI tasks.
+
+### Render + Vercel deployment
+
+- Deploy `backend/` as a Render web service using `backend/Dockerfile` (or install
+  `backend/requirements.txt` and start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
+- In Render, set `MONGODB_URI`, `MONGODB_DB_NAME`, `JWT_SECRET_KEY`,
+  `ALLOWED_ORIGINS`, and `GEMINI_API_KEY` as environment variables. Generate a
+  unique signing secret with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+  `ALLOWED_ORIGINS` must be a JSON array containing the exact Vercel origin, for example
+  `["https://your-app.vercel.app"]`.
+- In Vercel, set `VITE_API_BASE_URL` to the Render service URL ending in `/api/v1`,
+  for example `https://your-service.onrender.com/api/v1`, then redeploy.
+- Keep `JWT_SECRET_KEY` only on the backend. Never add it to Vercel or a `VITE_*`
+  variable. Keep `.env` files out of Git.
 
 ---
 
