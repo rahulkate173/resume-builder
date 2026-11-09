@@ -12,6 +12,7 @@ from textwrap import dedent
 from typing import Any
 
 from app.core.config import get_settings
+from app.agents.llm import invoke_chat
 from app.models.agent import GeneratedSummary
 from app.agents.fallback import fallback_generate_summary
 
@@ -50,7 +51,7 @@ async def generate_summary(
     """Generate executive summary. Falls back to template if no API key."""
     snap = profile_snapshot or {}
 
-    if not settings.has_groq:
+    if not settings.has_gemini:
         return fallback_generate_summary(
             job_role=job_role,
             seniority=seniority,
@@ -58,9 +59,6 @@ async def generate_summary(
         )
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
-
         context = dedent(f"""\
 Job Role: {job_role}
 Seniority: {seniority}
@@ -75,16 +73,12 @@ Candidate Snapshot:
 
 Generate the 3-sentence summary. Return JSON only.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user", "content": context},
-            ],
+        raw = await invoke_chat(
+            _SYSTEM,
+            context,
             temperature=0.5,
             max_tokens=512,
         )
-        raw = resp.choices[0].message.content or "{}"
         data = _parse_json(raw)
         return GeneratedSummary(
             summary=data.get("summary", ""),

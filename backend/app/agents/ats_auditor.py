@@ -12,6 +12,7 @@ from textwrap import dedent
 from typing import Any
 
 from app.core.config import get_settings
+from app.agents.llm import invoke_chat
 from app.models.agent import ATSAuditResult
 from app.agents.fallback import fallback_ats_audit
 
@@ -46,13 +47,10 @@ async def audit_ats(
     job_description: str = "",
 ) -> ATSAuditResult:
     """ATS audit with LLM primary + deterministic fallback."""
-    if not settings.has_groq or len(latex_source) < 100:
+    if not settings.has_gemini or len(latex_source) < 100:
         return fallback_ats_audit(latex_source=latex_source, job_description=job_description)
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
-
         user_msg = dedent(f"""\
 Job Description (first 800 chars):
 {job_description[:800]}
@@ -62,16 +60,12 @@ LaTeX Resume (first 3000 chars):
 
 Perform the ATS audit and return JSON only.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
+        raw = await invoke_chat(
+            _SYSTEM,
+            user_msg,
             temperature=0.0,
             max_tokens=1024,
         )
-        raw = resp.choices[0].message.content or "{}"
         data = _parse_json(raw)
 
         return ATSAuditResult(

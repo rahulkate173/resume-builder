@@ -22,7 +22,7 @@ class JDResumeRequest(BaseModel):
     job_role:        str = Field(..., min_length=1, max_length=200)
     company:         str = Field(..., min_length=1, max_length=200)
     job_description: str = Field(..., min_length=10, max_length=10000)
-    template_key:    str = "classic"
+    template_key:    str = "executive"
 
 
 # ── POST /jd-resume/generate  (SSE streaming) ─────────────────────────────────

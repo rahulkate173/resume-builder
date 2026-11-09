@@ -64,7 +64,7 @@ async def rewrite_bullet_endpoint(
         )
         run.status = AgentStatus.DONE
         run.result = result.model_dump()
-        run.fallback_used = not settings.has_groq
+        run.fallback_used = not settings.has_gemini
     except Exception as e:
         run.status = AgentStatus.FAILED
         run.error = str(e)
@@ -103,7 +103,7 @@ async def ats_audit_endpoint(
         )
         run.status = AgentStatus.DONE
         run.result = result.model_dump()
-        run.fallback_used = not settings.has_groq
+        run.fallback_used = not settings.has_gemini
     except Exception as e:
         run.status = AgentStatus.FAILED
         run.error = str(e)
@@ -141,7 +141,7 @@ async def tailor_to_jd_endpoint(
         )
         run.status = AgentStatus.DONE
         run.result = result.model_dump()
-        run.fallback_used = not settings.has_groq
+        run.fallback_used = not settings.has_gemini
     except Exception as e:
         run.status = AgentStatus.FAILED
         run.error = str(e)
@@ -177,7 +177,7 @@ async def generate_summary_endpoint(
         )
         run.status = AgentStatus.DONE
         run.result = result.model_dump()
-        run.fallback_used = not settings.has_groq
+        run.fallback_used = not settings.has_gemini
     except Exception as e:
         run.status = AgentStatus.FAILED
         run.error = str(e)
@@ -194,14 +194,14 @@ async def get_model_status(current_user: dict = Depends(get_current_user)):
     """Return current AI model configuration and availability."""
     return {
         "agent1": {
-            "model": settings.agent1_model,
-            "provider": "Groq",
-            "available": settings.has_groq,
+            "model": settings.gemini_model,
+            "provider": "Gemini via LangChain",
+            "available": settings.has_gemini,
         },
         "agent2": {
-            "model": settings.groq_model,
-            "provider": "Groq",
-            "available": settings.has_groq,
+            "model": settings.gemini_model,
+            "provider": "Gemini via LangChain",
+            "available": settings.has_gemini,
         },
         "fallback": {
             "mode": "deterministic",

@@ -7,11 +7,11 @@ Architecture (from diagram):
   Input: Job Role, Job Description, Company Name
 
   1. Web Search Agent   (Tavily)    → company intel
-  2. Short Summary Agent (Groq)     → summarise company + JD, strip irrelevant
+  2. Short Summary Agent (Gemini)   → summarise company + JD, strip irrelevant
   3. Previous Resume Agent          → extract name, email, linkedin, education from profile
   4. GitHub Repo Agent  (GitHub API)→ top-5 repos most relevant to the summary
-  5. Resume Generate Agent (Groq)   → full LaTeX resume combining all above
-  6. Review Agent       (Groq)      → similarity score vs summary; if < threshold → loop to 5
+  5. Resume Generate Agent (Gemini) → full LaTeX resume combining all above
+  6. Review Agent       (Gemini)    → similarity score vs summary; if < threshold → loop to 5
   7. LaTeX→PDF Agent                → compile LaTeX to PDF bytes
 
 Threshold for review: score >= 75 passes; otherwise regenerates (max 3 times).
@@ -19,15 +19,16 @@ Threshold for review: score >= 75 passes; otherwise regenerates (max 3 times).
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from datetime import datetime
 from textwrap import dedent
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional, TypedDict
 
 import httpx
+from langgraph.graph import END, START, StateGraph
 
+from app.agents.llm import invoke_chat
 from app.core.config import get_settings
 from app.services.pdf_service import compile_latex_to_pdf
 from app.services.latex_templates import get_template
@@ -109,7 +110,7 @@ async def _web_search_agent(job_role: str, company: str, job_description: str) -
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AGENT 2 — Short Summary (Groq)
+# AGENT 2 — Short Summary (Gemini via LangChain)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _SUMMARY_SYSTEM = dedent("""\
@@ -124,13 +125,11 @@ Return ONLY the summary paragraph — no bullet points, no headers.
 
 async def _summary_agent(company_info: str, job_role: str, job_description: str) -> str:
     """Summarise company + JD into a focused paragraph for downstream agents."""
-    if not settings.has_groq:
+    if not settings.has_gemini:
         # Fallback: just truncate JD
         return f"Role: {job_role}. {job_description[:500]}"
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
         user_msg = dedent(f"""\
 ## Company Intel
 {company_info}
@@ -142,16 +141,13 @@ async def _summary_agent(company_info: str, job_role: str, job_description: str)
 
 Produce the concise summary now.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _SUMMARY_SYSTEM},
-                {"role": "user",   "content": user_msg},
-            ],
+        response = await invoke_chat(
+            _SUMMARY_SYSTEM,
+            user_msg,
             temperature=0.3,
             max_tokens=512,
         )
-        return resp.choices[0].message.content or f"Role: {job_role}. {job_description[:500]}"
+        return response or f"Role: {job_role}. {job_description[:500]}"
     except Exception:
         return f"Role: {job_role}. {job_description[:500]}"
 
@@ -161,7 +157,7 @@ Produce the concise summary now.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_essential_profile(profile: dict) -> dict:
-    """Extract name, email, linkedin, education from profile for resume generation."""
+    """Keep the most relevant profile details within a one-page resume budget."""
     return {
         "full_name":  profile.get("full_name", ""),
         "email":      profile.get("email", ""),
@@ -169,10 +165,17 @@ def _extract_essential_profile(profile: dict) -> dict:
         "linkedin":   profile.get("linkedin", ""),
         "github":     profile.get("github", ""),
         "location":   profile.get("location", ""),
-        "education":  profile.get("education", []),
-        "skills":     profile.get("skills", []),
-        "languages":  profile.get("languages", []),
-        "experience": profile.get("experience", []),
+        "education":  profile.get("education", [])[:2],
+        "skills":     profile.get("skills", [])[:16],
+        "languages":  profile.get("languages", [])[:8],
+        "experience": [
+            {**entry, "bullets": entry.get("bullets", [])[:3]}
+            for entry in profile.get("experience", [])[:3]
+        ],
+        "projects": [
+            {**project, "bullets": project.get("bullets", [])[:2]}
+            for project in profile.get("projects", [])[:2]
+        ],
     }
 
 
@@ -237,22 +240,29 @@ async def _github_repo_agent(github_username: str, summary: str) -> list[dict]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AGENT 5 — Resume Generate (Groq → LaTeX)
+# AGENT 5 — Resume Generate (Gemini via LangChain → LaTeX)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _GEN_SYSTEM = dedent("""\
-You are an expert LaTeX resume writer specialising in ATS-optimised, one-page resumes.
+You are an expert LaTeX resume writer specialising in ATS-friendly, one-page resumes.
 
 Rules:
 1. Analyse the summary, profile, and GitHub projects together.
-2. Fill ALL {{PLACEHOLDER}} tokens in the template.
-3. Prioritise GitHub projects most relevant to the job summary.
-4. Ensure the resume fits on ONE page — use tight spacing.
-5. Use strong action verbs and quantifiable achievements.
-6. Match keywords from the job summary.
-7. Output ONLY valid, compilable LaTeX — no markdown fences, no explanation.
-8. Do NOT hallucinate experience or skills not present in the profile.
-9. Escape LaTeX special chars: %, &, $, #, _, ^, {, }.
+2. Fill every {{PLACEHOLDER}} in the supplied single-column template; do not replace its layout.
+3. Keep the resume to ONE page. Include at most 3 experience entries, 3 bullets per role,
+   2 projects with at most 2 bullets each, 2 education entries, and 16 relevant skills.
+4. Write concise, factual bullet points (ideally one line each) with strong verbs. Never
+   turn multiple experience bullets into a paragraph or combine headings and dates.
+5. Match relevant job-description keywords only when supported by the candidate profile.
+6. Preserve every company, role, date, and metric accurately. Do not invent achievements,
+   metrics, technologies, or employment details.
+7. For experience entries use \\resumeSubheading and wrap bullets in
+   \\resumeItemListStart / \\resumeItem / \\resumeItemListEnd.
+8. For project entries use \\resumeProjectHeading and wrap bullets in the same item-list
+   macros. Use \\resumeSubheading for education entries.
+9. Keep standard ATS section headings and a single-column reading order.
+10. Output ONLY valid, compilable LaTeX — no markdown fences or explanation. Escape LaTeX
+    special characters in candidate-provided text.
 """)
 
 
@@ -265,14 +275,11 @@ async def _resume_generate_agent(
     template_latex: str,
     feedback:    str = "",
 ) -> str:
-    """Generate a LaTeX resume. Falls back to deterministic fill if no Groq."""
-    if not settings.has_groq:
+    """Generate a LaTeX resume, or use deterministic fill when Gemini is unavailable."""
+    if not settings.has_gemini:
         return _deterministic_fill(template_latex, profile, job_role, company)
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
-
         profile_json = json.dumps(profile, indent=2, default=str)
         repos_json   = json.dumps(github_repos, indent=2, default=str)
         feedback_block = f"\n\n## Previous Attempt Feedback\n{feedback}" if feedback else ""
@@ -296,23 +303,19 @@ async def _resume_generate_agent(
 ## Output
 Return ONLY the complete, compilable LaTeX source code.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _GEN_SYSTEM},
-                {"role": "user",   "content": user_msg},
-            ],
+        raw = await invoke_chat(
+            _GEN_SYSTEM,
+            user_msg,
             temperature=0.3,
             max_tokens=4096,
         )
-        raw = resp.choices[0].message.content or ""
         return _strip_fences(raw)
     except Exception:
         return _deterministic_fill(template_latex, profile, job_role, company)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AGENT 6 — Review Agent (Groq)
+# AGENT 6 — Review Agent (Gemini via LangChain)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _REVIEW_SYSTEM = dedent("""\
@@ -330,20 +333,17 @@ score >= 75 → passed=true. Focus on: keyword match, project relevance, formatt
 
 async def _review_agent(summary: str, latex_source: str) -> dict:
     """Score the generated resume against the summary. Falls back to structural check."""
-    if not settings.has_groq:
+    if not settings.has_gemini:
         from app.services.pdf_service import validate_latex
         valid, issues = validate_latex(latex_source)
         return {
             "score":    80 if valid else 40,
             "passed":   valid,
-            "feedback": "Structural validation only (no LLM review key).",
+            "feedback": "Structural validation only (no Gemini key).",
             "issues":   issues,
         }
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
-
         user_msg = dedent(f"""\
 ## Role & Company Summary
 {summary}
@@ -355,16 +355,12 @@ async def _review_agent(summary: str, latex_source: str) -> dict:
 
 Evaluate and return JSON.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _REVIEW_SYSTEM},
-                {"role": "user",   "content": user_msg},
-            ],
+        raw = await invoke_chat(
+            _REVIEW_SYSTEM,
+            user_msg,
             temperature=0.0,
             max_tokens=512,
         )
-        raw = resp.choices[0].message.content or "{}"
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             data = json.loads(m.group())
@@ -381,17 +377,201 @@ Evaluate and return JSON.
     return {"score": 75, "passed": True, "feedback": "Review unavailable.", "issues": []}
 
 
+class JDPipelineState(TypedDict, total=False):
+    job_role: str
+    company: str
+    job_description: str
+    profile: dict
+    user_id: str
+    requested_template_key: str
+    template_key: str
+    template_latex: str
+    company_info: str
+    summary: str
+    essential_profile: dict
+    github_username: str
+    github_repos: list[dict]
+    latex_source: str
+    feedback: str
+    review: dict
+    iterations: int
+    pdf_success: bool
+    pdf_bytes: Optional[bytes]
+    pdf_error: str
+    resume_id: Optional[str]
+
+
+async def _select_jd_template(state: JDPipelineState) -> dict:
+    from app.services.latex_templates import get_template_names
+
+    template_key = state["requested_template_key"]
+    if template_key not in get_template_names():
+        template_key = "executive"
+    return {
+        "template_key": template_key,
+        "template_latex": get_template(template_key),
+        "iterations": 0,
+        "feedback": "",
+    }
+
+
+async def _search_company(state: JDPipelineState) -> dict:
+    return {
+        "company_info": await _web_search_agent(
+            state["job_role"],
+            state["company"],
+            state["job_description"],
+        )
+    }
+
+
+async def _summarize_job(state: JDPipelineState) -> dict:
+    return {
+        "summary": await _summary_agent(
+            state["company_info"],
+            state["job_role"],
+            state["job_description"],
+        )
+    }
+
+
+async def _extract_profile(state: JDPipelineState) -> dict:
+    profile = state["profile"]
+    return {
+        "essential_profile": _extract_essential_profile(profile),
+        "github_username": profile.get("github", "").rstrip("/").split("/")[-1],
+    }
+
+
+async def _find_relevant_repositories(state: JDPipelineState) -> dict:
+    return {
+        "github_repos": await _github_repo_agent(
+            state["github_username"],
+            state["summary"],
+        )
+    }
+
+
+async def _generate_jd_resume(state: JDPipelineState) -> dict:
+    return {
+        "latex_source": await _resume_generate_agent(
+            job_role=state["job_role"],
+            company=state["company"],
+            summary=state["summary"],
+            profile=state["essential_profile"],
+            github_repos=state["github_repos"],
+            template_latex=state["template_latex"],
+            feedback=state.get("feedback", ""),
+        )
+    }
+
+
+async def _review_jd_resume(state: JDPipelineState) -> dict:
+    review = await _review_agent(state["summary"], state["latex_source"])
+    return {
+        "review": review,
+        "iterations": state["iterations"] + 1,
+        "feedback": review.get("feedback", ""),
+    }
+
+
+def _route_jd_review(state: JDPipelineState) -> str:
+    if state["review"].get("passed") or state["iterations"] >= MAX_GEN_ITER:
+        return "compile_pdf"
+    return "generate"
+
+
+async def _compile_jd_pdf(state: JDPipelineState) -> dict:
+    pdf_success, pdf_bytes, pdf_error = await compile_latex_to_pdf(state["latex_source"])
+    return {
+        "pdf_success": pdf_success,
+        "pdf_bytes": pdf_bytes,
+        "pdf_error": pdf_error,
+    }
+
+
+async def _persist_jd_resume(state: JDPipelineState) -> dict:
+    import base64
+    from app.core.database import get_db
+
+    resume_id = None
+    try:
+        db = get_db()
+        review = state["review"]
+        doc = {
+            "user_id": state["user_id"],
+            "title": f"{state['job_role']} @ {state['company']}",
+            "job_role": state["job_role"],
+            "company": state["company"],
+            "job_description": state["job_description"][:2000],
+            "template_key": state["template_key"],
+            "latex_output": state["latex_source"],
+            "pdf_base64": (
+                base64.b64encode(state["pdf_bytes"]).decode()
+                if state.get("pdf_bytes")
+                else None
+            ),
+            "verified": review.get("passed", False),
+            "verification_score": review.get("score", 0),
+            "verification_notes": review.get("feedback", ""),
+            "jd_match_score": review.get("score", 0),
+            "ats_score": review.get("score", 0),
+            "agent1_iterations": state["iterations"],
+            "pipeline_type": "jd_agentic",
+            "github_repos_used": state["github_repos"],
+            "summary_used": state["summary"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+        inserted = await db.resumes.insert_one(doc)
+        resume_id = str(inserted.inserted_id)
+    except Exception:
+        pass
+    return {"resume_id": resume_id}
+
+
+def _build_jd_pipeline_graph():
+    workflow = StateGraph(JDPipelineState)
+    workflow.add_node("select_template", _select_jd_template)
+    workflow.add_node("web_search", _search_company)
+    workflow.add_node("summary", _summarize_job)
+    workflow.add_node("profile", _extract_profile)
+    workflow.add_node("github", _find_relevant_repositories)
+    workflow.add_node("generate", _generate_jd_resume)
+    workflow.add_node("review", _review_jd_resume)
+    workflow.add_node("compile_pdf", _compile_jd_pdf)
+    workflow.add_node("persist", _persist_jd_resume)
+    workflow.add_edge(START, "select_template")
+    workflow.add_edge("select_template", "web_search")
+    workflow.add_edge("web_search", "summary")
+    workflow.add_edge("summary", "profile")
+    workflow.add_edge("profile", "github")
+    workflow.add_edge("github", "generate")
+    workflow.add_edge("generate", "review")
+    workflow.add_conditional_edges(
+        "review",
+        _route_jd_review,
+        {"generate": "generate", "compile_pdf": "compile_pdf"},
+    )
+    workflow.add_edge("compile_pdf", "persist")
+    workflow.add_edge("persist", END)
+    return workflow.compile()
+
+
+_jd_pipeline_graph = _build_jd_pipeline_graph()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN PIPELINE (non-streaming, returns JDPipelineResult)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def run_jd_pipeline(
+async def _run_jd_pipeline_legacy(
     job_role:    str,
     company:     str,
     job_description: str,
     profile:     dict,
     user_id:     str,
-    template_key: str = "classic",
+    template_key: str = "executive",
 ) -> JDPipelineResult:
     """
     Full 7-agent JD-based resume generation pipeline.
@@ -406,7 +586,7 @@ async def run_jd_pipeline(
     # — Select template ——————————————————————————————————————————
     available = get_template_names()
     if template_key not in available:
-        template_key = "classic"
+        template_key = "executive"
     template_latex = get_template(template_key)
 
     # — Agent 1: Web Search ———————————————————————————————————————
@@ -494,13 +674,13 @@ async def run_jd_pipeline(
 # STREAMING VERSION (SSE) — for frontend progress updates
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def run_jd_pipeline_stream(
+async def _run_jd_pipeline_stream_legacy(
     job_role:    str,
     company:     str,
     job_description: str,
     profile:     dict,
     user_id:     str,
-    template_key: str = "classic",
+    template_key: str = "executive",
 ) -> AsyncGenerator[dict, None]:
     """
     Streaming version of the JD pipeline. Yields step dicts for SSE.
@@ -514,7 +694,7 @@ async def run_jd_pipeline_stream(
 
     available = get_template_names()
     if template_key not in available:
-        template_key = "classic"
+        template_key = "executive"
     template_latex = get_template(template_key)
 
     # Step 1
@@ -645,6 +825,170 @@ async def run_jd_pipeline_stream(
     }
 
 
+def _initial_jd_state(
+    job_role: str,
+    company: str,
+    job_description: str,
+    profile: dict,
+    user_id: str,
+    template_key: str,
+) -> JDPipelineState:
+    return {
+        "job_role": job_role,
+        "company": company,
+        "job_description": job_description,
+        "profile": profile,
+        "user_id": user_id,
+        "requested_template_key": template_key,
+    }
+
+
+def _jd_result_from_state(state: JDPipelineState) -> JDPipelineResult:
+    result = JDPipelineResult()
+    result.summary = state["summary"]
+    result.github_repos = state["github_repos"]
+    result.final_latex = state["latex_source"]
+    result.pdf_bytes = state.get("pdf_bytes")
+    result.pdf_success = state["pdf_success"]
+    result.pdf_error = state["pdf_error"]
+    result.review_score = state["review"].get("score", 0)
+    result.iterations = state["iterations"]
+    result.success = True
+    return result
+
+
+async def run_jd_pipeline(
+    job_role: str,
+    company: str,
+    job_description: str,
+    profile: dict,
+    user_id: str,
+    template_key: str = "executive",
+) -> JDPipelineResult:
+    """Run the JD resume generation LangGraph and return its result."""
+    state = await _jd_pipeline_graph.ainvoke(
+        _initial_jd_state(
+            job_role,
+            company,
+            job_description,
+            profile,
+            user_id,
+            template_key,
+        )
+    )
+    return _jd_result_from_state(state)
+
+
+async def run_jd_pipeline_stream(
+    job_role: str,
+    company: str,
+    job_description: str,
+    profile: dict,
+    user_id: str,
+    template_key: str = "executive",
+) -> AsyncGenerator[dict, None]:
+    """Stream progress updates while the JD resume LangGraph runs."""
+    state = _initial_jd_state(
+        job_role,
+        company,
+        job_description,
+        profile,
+        user_id,
+        template_key,
+    )
+
+    async for update in _jd_pipeline_graph.astream(state, stream_mode="updates"):
+        for node, values in update.items():
+            if node == "generate":
+                attempt = state.get("iterations", 0) + 1
+                yield JDPipelineStep(
+                    "generate",
+                    f"🤖 Generating resume (attempt {attempt}/{MAX_GEN_ITER})…",
+                    50 + (attempt - 1) * 10,
+                ).to_dict()
+            elif node == "review":
+                review = values["review"]
+                score = review.get("score", 0)
+                pct = 55 + (state.get("iterations", 0)) * 10
+                if review.get("passed"):
+                    yield JDPipelineStep(
+                        "review",
+                        f"✅ Review passed (score: {score}/100)",
+                        pct + 2,
+                        {"score": score},
+                    ).to_dict()
+                else:
+                    yield JDPipelineStep(
+                        "review",
+                        f"⚠️ Score {score}/100 below threshold — regenerating…",
+                        pct + 2,
+                        {"score": score, "feedback": review.get("feedback", "")},
+                    ).to_dict()
+            elif node == "web_search":
+                yield JDPipelineStep(
+                    "web_search",
+                    f"🔍 Searching the web for {company}…",
+                    5,
+                ).to_dict()
+            elif node == "summary":
+                yield JDPipelineStep(
+                    "summary",
+                    "📝 Summarising company intel & JD…",
+                    20,
+                ).to_dict()
+            elif node == "profile":
+                yield JDPipelineStep(
+                    "profile",
+                    "👤 Extracting profile details…",
+                    30,
+                ).to_dict()
+            elif node == "github":
+                yield JDPipelineStep(
+                    "github",
+                    f"🐙 Fetching top GitHub repos for @{state.get('github_username') or 'user'}…",
+                    40,
+                ).to_dict()
+                repos = values["github_repos"]
+                yield JDPipelineStep(
+                    "github",
+                    f"✅ Found {len(repos)} relevant repos",
+                    45,
+                    {"repos": [repo["name"] for repo in repos]},
+                ).to_dict()
+            elif node == "compile_pdf":
+                if values["pdf_success"]:
+                    yield JDPipelineStep(
+                        "pdf",
+                        "✅ PDF compiled successfully!",
+                        95,
+                    ).to_dict()
+                else:
+                    yield JDPipelineStep(
+                        "pdf",
+                        f"⚠️ PDF compile issue: {values['pdf_error'][:100]}",
+                        95,
+                    ).to_dict()
+            elif node == "persist":
+                yield JDPipelineStep(
+                    "save",
+                    "💾 Saving to your dashboard…",
+                    98,
+                ).to_dict()
+            state.update(values)
+
+    result = _jd_result_from_state(state)
+    yield {
+        "type": "done",
+        "resume_id": state.get("resume_id"),
+        "review_score": result.review_score,
+        "iterations": result.iterations,
+        "pdf_success": result.pdf_success,
+        "repos_used": len(result.github_repos),
+        "percent": 100,
+        "message": "🎉 Resume generated and saved!",
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Utilities (shared with main pipeline)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -665,9 +1009,9 @@ def _escape_latex(s: str) -> str:
 
 def _deterministic_fill(template_latex: str, profile: dict, job_role: str, company: str) -> str:
     """Fallback: fill template placeholders with profile data (no LLM)."""
-    edu   = profile.get("education", [{}])
-    exp   = profile.get("experience", [{}])
-    projs = profile.get("projects", [{}])
+    edu   = profile.get("education", [])
+    exp   = profile.get("experience", [])
+    projs = profile.get("projects", [])
 
     replacements = {
         "{{NAME}}":                  profile.get("full_name", "Your Name"),
@@ -676,8 +1020,8 @@ def _deterministic_fill(template_latex: str, profile: dict, job_role: str, compa
         "{{LINKEDIN}}":              profile.get("linkedin", ""),
         "{{GITHUB}}":                profile.get("github", ""),
         "{{EXTRA_LINKS}}":           "",
-        "{{SKILLS}}":                ", ".join(profile.get("skills", [])),
-        "{{LANGUAGES}}":             ", ".join(profile.get("languages", [])),
+        "{{SKILLS}}":                ", ".join(profile.get("skills", [])[:16]),
+        "{{LANGUAGES}}":             ", ".join(profile.get("languages", [])[:8]),
         "{{EDUCATION_ENTRIES}}":     _fmt_edu(edu),
         "{{EXPERIENCE_ENTRIES}}":    _fmt_exp(exp),
         "{{PROJECT_ENTRIES}}":       _fmt_proj(projs),
@@ -693,25 +1037,33 @@ def _deterministic_fill(template_latex: str, profile: dict, job_role: str, compa
 def _fmt_exp(entries: list[dict]) -> str:
     lines = []
     for e in entries:
+        if not any(e.get(field) for field in ("company", "role", "duration", "location")):
+            continue
         lines.append(
             f"\\resumeSubheading{{{_escape_latex(e.get('company',''))}}}"
-            f"{{{e.get('duration','')}}}"
+            f"{{{_escape_latex(e.get('duration',''))}}}"
             f"{{{_escape_latex(e.get('role',''))}}}"
-            f"{{{e.get('location','')}}}"
+            f"{{{_escape_latex(e.get('location',''))}}}"
         )
-        for b in e.get("bullets", []):
-            lines.append(f"  \\resumeItem{{{_escape_latex(b)}}}")
+        bullets = e.get("bullets", [])[:3]
+        if bullets:
+            lines.append("\\resumeItemListStart")
+            lines.extend(f"  \\resumeItem{{{_escape_latex(b)}}}" for b in bullets)
+            lines.append("\\resumeItemListEnd")
     return "\n".join(lines)
 
 
 def _fmt_edu(entries: list[dict]) -> str:
     lines = []
     for e in entries:
-        gpa = f" — GPA: {e.get('gpa')}" if e.get("gpa") else ""
+        if not any(e.get(field) for field in ("institution", "degree", "field", "duration")):
+            continue
+        degree_field = " in ".join(filter(None, (e.get("degree", ""), e.get("field", ""))))
+        gpa = f"GPA: {e.get('gpa')}" if e.get("gpa") else ""
         lines.append(
             f"\\resumeSubheading{{{_escape_latex(e.get('institution',''))}}}"
-            f"{{{e.get('duration','')}}}"
-            f"{{{_escape_latex(e.get('degree','') + ' in ' + e.get('field',''))}}}"
+            f"{{{_escape_latex(e.get('duration',''))}}}"
+            f"{{{_escape_latex(degree_field)}}}"
             f"{{{_escape_latex(gpa)}}}"
         )
     return "\n".join(lines)
@@ -720,11 +1072,17 @@ def _fmt_edu(entries: list[dict]) -> str:
 def _fmt_proj(entries: list[dict]) -> str:
     lines = []
     for p in entries:
+        if not any(p.get(field) for field in ("name", "tech_stack", "duration")):
+            continue
         lines.append(
             f"\\resumeProjectHeading{{\\textbf{{{_escape_latex(p.get('name',''))}}}"
-            f" $|$ \\emph{{{_escape_latex(p.get('tech_stack',''))}}}}}"
-            f"{{{p.get('duration','')}}}"
+            f"{' $|$ ' if p.get('tech_stack') else ''}"
+            f"\\emph{{{_escape_latex(p.get('tech_stack',''))}}}}}"
+            f"{{{_escape_latex(p.get('duration',''))}}}"
         )
-        for b in p.get("bullets", []):
-            lines.append(f"  \\resumeItem{{{_escape_latex(b)}}}")
+        bullets = p.get("bullets", [])[:2]
+        if bullets:
+            lines.append("\\resumeItemListStart")
+            lines.extend(f"  \\resumeItem{{{_escape_latex(b)}}}" for b in bullets)
+            lines.append("\\resumeItemListEnd")
     return "\n".join(lines)

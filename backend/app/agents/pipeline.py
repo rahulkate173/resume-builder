@@ -6,13 +6,15 @@ Flow: Template select → Agent1 Generate → Agent2 Verify (loop) → LLM3 Poli
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import re
 from datetime import datetime
 from textwrap import dedent
-from typing import Any, AsyncGenerator, Optional
+from typing import Optional, TypedDict
 
+from langgraph.graph import END, START, StateGraph
+
+from app.agents.llm import invoke_chat
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.services.pdf_service import compile_latex_to_pdf, validate_latex
@@ -71,15 +73,13 @@ async def _run_agent1(
     template_latex: str,
     feedback: str = "",
 ) -> str:
-    """Generate LaTeX resume via Groq. Falls back to template skeleton."""
+    """Generate LaTeX resume through LangChain, or use the deterministic fallback."""
     import json
 
-    if not settings.has_groq:
+    if not settings.has_gemini:
         return _deterministic_fill(template_latex, profile, job_role, company)
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
         profile_json = json.dumps(profile, indent=2, default=str)
         feedback_block = f"\n\n## Previous Attempt Feedback\n{feedback}" if feedback else ""
         user_msg = dedent(f"""\
@@ -101,18 +101,14 @@ Fill ALL {{PLACEHOLDER}} tokens:
 ## Output
 Return ONLY the complete, compilable LaTeX source code.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.agent1_model,
-            messages=[
-                {"role": "system", "content": _GEN_SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
+        raw = await invoke_chat(
+            _GEN_SYSTEM,
+            user_msg,
             temperature=0.3,
             max_tokens=4096,
         )
-        raw = resp.choices[0].message.content or ""
         return _strip_fences(raw)
-    except Exception as e:
+    except Exception:
         return _deterministic_fill(template_latex, profile, job_role, company)
 
 
@@ -141,24 +137,22 @@ async def _run_agent2(
     profile: dict,
     latex_source: str,
 ) -> dict:
-    """Verify LaTeX resume via Groq. Falls back to structural check."""
+    """Verify LaTeX resume through LangChain, or use a structural check."""
     import json as _json
 
-    if not settings.has_groq:
+    if not settings.has_gemini:
         valid, issues = validate_latex(latex_source)
         return {
             "passed": valid,
             "score": 80 if valid else 40,
             "issues": issues,
-            "feedback": "Structural validation only (no Groq key).",
+            "feedback": "Structural validation only (no Gemini key).",
             "latex_valid": valid,
             "jd_match_score": 75,
             "experience_relevance_score": 75,
         }
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
         profile_json = _json.dumps(profile, indent=2, default=str)
         user_msg = dedent(f"""\
 ## Job Role: {job_role} @ {company}
@@ -176,16 +170,12 @@ async def _run_agent2(
 
 Evaluate and return JSON.
 """)
-        resp = await client.chat.completions.create(
-            model=settings.groq_model,
-            messages=[
-                {"role": "system", "content": _VERIFY_SYSTEM},
-                {"role": "user",   "content": user_msg},
-            ],
+        raw = await invoke_chat(
+            _VERIFY_SYSTEM,
+            user_msg,
             temperature=0.0,
             max_tokens=512,
         )
-        raw = resp.choices[0].message.content or "{}"
         import re as _re
         m = _re.search(r"\{.*\}", raw, _re.DOTALL)
         if m:
@@ -215,6 +205,115 @@ Evaluate and return JSON.
 
 # ── Main async pipeline ───────────────────────────────────────────────────────
 
+class PipelineState(TypedDict, total=False):
+    job_role: str
+    company: str
+    job_description: str
+    profile: dict
+    user_id: str
+    requested_template_key: str
+    template_key: str
+    template_latex: str
+    resume_id: Optional[str]
+    latex_source: str
+    feedback: str
+    verification: dict
+    iterations: int
+    pdf_success: bool
+    pdf_bytes: Optional[bytes]
+    pdf_error: str
+
+
+async def _select_template(state: PipelineState) -> dict:
+    available = get_template_names()
+    template_key = state["requested_template_key"]
+    # Step 1: Template selection
+    if template_key == "auto" or template_key not in available:
+        template_key = "classic"
+    return {
+        "template_key": template_key,
+        "template_latex": get_template(template_key),
+        "feedback": "",
+        "iterations": 0,
+    }
+
+
+async def _generate_resume(state: PipelineState) -> dict:
+    latex_source = await _run_agent1(
+        job_role=state["job_role"],
+        company=state["company"],
+        job_description=state["job_description"],
+        profile=state["profile"],
+        template_key=state["template_key"],
+        template_latex=state["template_latex"],
+        feedback=state.get("feedback", ""),
+    )
+    return {"latex_source": latex_source}
+
+
+async def _verify_resume(state: PipelineState) -> dict:
+    verification = await _run_agent2(
+        job_role=state["job_role"],
+        company=state["company"],
+        job_description=state["job_description"],
+        profile=state["profile"],
+        latex_source=state["latex_source"],
+    )
+    return {
+        "verification": verification,
+        "iterations": state["iterations"] + 1,
+        "feedback": verification.get("feedback", ""),
+    }
+
+
+def _route_after_verification(state: PipelineState) -> str:
+    if state["verification"].get("passed") or state["iterations"] >= MAX_ITER:
+        return "finalize"
+    return "generate"
+
+
+async def _finalize_pipeline(state: PipelineState) -> dict:
+    pdf_success, pdf_bytes, pdf_error = await compile_latex_to_pdf(state["latex_source"])
+    await _save_to_db(
+        user_id=state["user_id"],
+        resume_id=state.get("resume_id"),
+        job_role=state["job_role"],
+        company=state["company"],
+        job_description=state["job_description"],
+        template_key=state["template_key"],
+        latex_output=state["latex_source"],
+        pdf_bytes=pdf_bytes,
+        iterations=state["iterations"],
+        verification=state["verification"],
+    )
+    return {
+        "pdf_success": pdf_success,
+        "pdf_bytes": pdf_bytes,
+        "pdf_error": pdf_error,
+    }
+
+
+def _build_pipeline_graph():
+    workflow = StateGraph(PipelineState)
+    workflow.add_node("select_template", _select_template)
+    workflow.add_node("generate", _generate_resume)
+    workflow.add_node("verify", _verify_resume)
+    workflow.add_node("finalize", _finalize_pipeline)
+    workflow.add_edge(START, "select_template")
+    workflow.add_edge("select_template", "generate")
+    workflow.add_edge("generate", "verify")
+    workflow.add_conditional_edges(
+        "verify",
+        _route_after_verification,
+        {"generate": "generate", "finalize": "finalize"},
+    )
+    workflow.add_edge("finalize", END)
+    return workflow.compile()
+
+
+_pipeline_graph = _build_pipeline_graph()
+
+
 async def run_pipeline(
     job_role: str,
     company: str,
@@ -224,69 +323,25 @@ async def run_pipeline(
     template_key: str = "auto",
     resume_id: Optional[str] = None,
 ) -> PipelineResult:
+    state = await _pipeline_graph.ainvoke({
+        "job_role": job_role,
+        "company": company,
+        "job_description": job_description,
+        "profile": profile,
+        "user_id": user_id,
+        "requested_template_key": template_key,
+        "resume_id": resume_id,
+    })
     result = PipelineResult()
-    available = get_template_names()
-
-    # Step 1: Template selection
-    if template_key == "auto" or template_key not in available:
-        template_key = "classic"
-    result.template_key = template_key
-    template_latex = get_template(template_key)
-
-    # Steps 2–3: Generate + Verify loop
-    latex_source = ""
-    feedback = ""
-    verification: dict = {}
-
-    for iteration in range(MAX_ITER):
-        latex_source = await _run_agent1(
-            job_role=job_role,
-            company=company,
-            job_description=job_description,
-            profile=profile,
-            template_key=template_key,
-            template_latex=template_latex,
-            feedback=feedback,
-        )
-
-        verification = await _run_agent2(
-            job_role=job_role,
-            company=company,
-            job_description=job_description,
-            profile=profile,
-            latex_source=latex_source,
-        )
-
-        result.iterations = iteration + 1
-        result.verification_result = verification
-
-        if verification.get("passed", False):
-            break
-        feedback = verification.get("feedback", "")
-
-    result.final_latex = latex_source
-
-    # Step 4: PDF compilation
-    pdf_success, pdf_bytes, pdf_error = await compile_latex_to_pdf(latex_source)
-    result.pdf_success = pdf_success
-    result.pdf_bytes = pdf_bytes
-    result.pdf_error = pdf_error
-
-    # Step 5: Persist to DB
-    await _save_to_db(
-        user_id=user_id,
-        resume_id=resume_id,
-        job_role=job_role,
-        company=company,
-        job_description=job_description,
-        template_key=template_key,
-        latex_output=latex_source,
-        pdf_bytes=pdf_bytes,
-        iterations=result.iterations,
-        verification=verification,
-    )
-
+    result.template_key = state["template_key"]
+    result.iterations = state["iterations"]
+    result.verification_result = state["verification"]
+    result.final_latex = state["latex_source"]
+    result.pdf_success = state["pdf_success"]
+    result.pdf_bytes = state["pdf_bytes"]
+    result.pdf_error = state["pdf_error"]
     result.success = True
+    result.fallback_used = not settings.has_gemini
     return result
 
 

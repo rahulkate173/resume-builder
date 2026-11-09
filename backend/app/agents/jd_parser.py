@@ -12,6 +12,7 @@ from textwrap import dedent
 from typing import Any
 
 from app.core.config import get_settings
+from app.agents.llm import invoke_chat
 from app.models.agent import JDAnalysis
 from app.agents.fallback import fallback_parse_jd
 
@@ -42,23 +43,16 @@ async def parse_jd(
     resume_skills: list[str] | None = None,
 ) -> JDAnalysis:
     """Parse job description. If resume_skills provided, compute gap matrix."""
-    if not settings.has_groq:
+    if not settings.has_gemini:
         result = fallback_parse_jd(job_description)
     else:
         try:
-            from groq import AsyncGroq
-            client = AsyncGroq(api_key=settings.groq_api_key)
-
-            resp = await client.chat.completions.create(
-                model=settings.agent1_model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM},
-                    {"role": "user", "content": f"Job Description:\n{job_description[:2000]}"},
-                ],
+            raw = await invoke_chat(
+                _SYSTEM,
+                f"Job Description:\n{job_description[:2000]}",
                 temperature=0.1,
                 max_tokens=1024,
             )
-            raw = resp.choices[0].message.content or "{}"
             data = _parse_json(raw)
             result = JDAnalysis(**data)
         except Exception:

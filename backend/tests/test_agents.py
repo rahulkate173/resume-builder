@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 @pytest.mark.asyncio
 async def test_rewrite_bullet_fallback(client, auth_headers):
     """Should succeed with deterministic fallback even without API key."""
-    with patch("app.core.config.Settings.has_groq", new=False):
+    with patch("app.core.config.Settings.has_gemini", new=False):
         resp = await client.post(
             "/api/v1/agents/rewrite-bullet",
             json={
@@ -100,7 +100,7 @@ async def test_models_status(client, auth_headers):
     assert resp.status_code == 200
     body = resp.json()
     assert "agent1" in body
-    assert body["agent2"]["provider"] == "Groq"
+    assert body["agent2"]["provider"] == "Gemini via LangChain"
     assert body["agent2"]["model"]
     assert "fallback" in body
     assert body["fallback"]["available"] is True

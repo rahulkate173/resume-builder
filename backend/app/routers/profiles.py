@@ -16,6 +16,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.profile import ProfileUpdateRequest, UserProfile
 from app.core.config import get_settings
+from app.agents.llm import invoke_chat
 
 router   = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
 settings = get_settings()
@@ -104,7 +105,7 @@ async def parse_resume_upload(
 ):
     """
     Upload a PDF or plain-text resume.
-    Extracts text → Groq LLM parses into structured profile JSON.
+    Extracts text → Gemini via LangChain parses into structured profile JSON.
     Returns parsed data WITHOUT auto-saving (user confirms first).
     """
     # Validate file type
@@ -138,8 +139,8 @@ async def parse_resume_upload(
     # Truncate to fit LLM context
     text = text[:8000]
 
-    # ── Parse with Groq ───────────────────────────────────────────────────────
-    parsed = await _groq_parse(text)
+    # ── Parse with Gemini via LangChain ────────────────────────────────────────
+    parsed = await _gemini_parse(text)
 
     return {
         "parsed": parsed,
@@ -165,30 +166,23 @@ def _extract_pdf_text(raw: bytes) -> str:
         )
 
 
-async def _groq_parse(text: str) -> dict:
-    """Send resume text to Groq and return parsed profile dict."""
+async def _gemini_parse(text: str) -> dict:
+    """Send resume text to Gemini through LangChain and return profile data."""
     import json, re
 
-    if not settings.has_groq:
+    if not settings.has_gemini:
         raise HTTPException(
             status_code=503,
-            detail="Groq API key not configured. Set GROQ_API_KEY in .env",
+            detail="Gemini API key not configured. Set GEMINI_API_KEY in .env",
         )
 
     try:
-        from groq import AsyncGroq
-        client = AsyncGroq(api_key=settings.groq_api_key)
-
-        resp = await client.chat.completions.create(
-            model=settings.groq_model,
-            messages=[
-                {"role": "system", "content": _PARSE_SYSTEM},
-                {"role": "user",   "content": f"Parse this resume:\n\n{text}"},
-            ],
+        raw = await invoke_chat(
+            _PARSE_SYSTEM,
+            f"Parse this resume:\n\n{text}",
             temperature=0.1,
             max_tokens=4096,
         )
-        raw = resp.choices[0].message.content or "{}"
         # Strip markdown fences if present
         raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
         raw = re.sub(r"\s*```$", "", raw)
@@ -199,6 +193,6 @@ async def _groq_parse(text: str) -> dict:
     except json.JSONDecodeError:
         raise HTTPException(status_code=422, detail="LLM returned invalid JSON. Please try again.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Groq parsing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Gemini parsing failed: {e}")
 
     raise HTTPException(status_code=422, detail="Could not parse resume structure.")

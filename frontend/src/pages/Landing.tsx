@@ -159,7 +159,7 @@ export default function Landing() {
           Create Free Account →
         </Link>
         <p className="mt-4 text-xs text-zinc-600">
-          Built on Groq · Tavily · GitHub API · LaTeX · FastAPI · MongoDB
+          Built on Gemini · LangChain · LangGraph · Tavily · GitHub API · LaTeX · FastAPI · MongoDB
         </p>
       </section>
     </div>

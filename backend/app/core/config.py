@@ -8,7 +8,6 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,11 +41,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24  # 24 hours
     jwt_refresh_expire_days: int = 7
 
-    # ── Groq (single LLM provider for all agents) ─────────────────────────
-    groq_api_key: Optional[str] = None
-    groq_model:   str = "qwen/qwen3.8-27b"
-    # backwards-compat aliases
-    agent1_model: str = "qwen/qwen3.8-27b"
+    # ── Gemini (LangChain model for all agents) ────────────────────────────
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-2.5-flash"
 
     # ── Tavily (Web Search Agent) ─────────────────────────────────────────
     tavily_api_key: Optional[str] = None
@@ -63,8 +60,8 @@ class Settings(BaseSettings):
     ai_rate_limit_per_minute: int = 10
 
     @property
-    def has_groq(self) -> bool:
-        return bool(self.groq_api_key)
+    def has_gemini(self) -> bool:
+        return bool(self.gemini_api_key)
 
     @property
     def has_tavily(self) -> bool:
@@ -76,12 +73,7 @@ class Settings(BaseSettings):
 
     @property
     def ai_available(self) -> bool:
-        return self.has_groq
-
-    def groq_client(self):
-        """Return a configured AsyncGroq client."""
-        from groq import AsyncGroq
-        return AsyncGroq(api_key=self.groq_api_key)
+        return self.has_gemini
 
 
 @lru_cache

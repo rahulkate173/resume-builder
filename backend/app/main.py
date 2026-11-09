@@ -39,10 +39,9 @@ app = FastAPI(
     description="""
 ## AI Resume Builder API
 
-Production-grade resume builder with **multi-agent AI** pipeline:
-- **Agent 1** (Groq): LaTeX resume generation with JD tailoring
-- **Agent 2** (Groq): Quality verification with structured scoring
-- **LLM 3** (Mistral/Groq): Final polish and PDF compilation
+Production-grade resume builder with a **LangGraph multi-agent AI** pipeline:
+- **Gemini via LangChain**: LaTeX resume generation, JD tailoring, and quality verification
+- **LangGraph**: Orchestrates agent stages, review loops, and PDF compilation
 
 ### Features
 - JWT authentication with refresh tokens
