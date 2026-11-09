@@ -5,11 +5,37 @@ Application settings via pydantic-settings (reads from .env automatically).
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
+from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import (
+    DotEnvSettingsSource,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+)
+
+
+class _RawAllowedOriginsSource:
+    def prepare_field_value(
+        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    ) -> Any:
+        if field_name == "allowed_origins" and isinstance(value, str):
+            return value
+        return super().prepare_field_value(
+            field_name, field, value, value_is_complex
+        )
+
+
+class _AllowedOriginsEnvSource(_RawAllowedOriginsSource, EnvSettingsSource):
+    pass
+
+
+class _AllowedOriginsDotEnvSource(_RawAllowedOriginsSource, DotEnvSettingsSource):
+    pass
 
 
 class Settings(BaseSettings):
@@ -28,6 +54,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:80",
+        "https://resume-builder-rho-sooty.vercel.app/"
     ]
 
     # ── MongoDB ──────────────────────────────────────────────────────────────
@@ -59,6 +86,63 @@ class Settings(BaseSettings):
     # ── Rate limiting ─────────────────────────────────────────────────────
     rate_limit_per_minute: int = 60
     ai_rate_limit_per_minute: int = 10
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: EnvSettingsSource,
+        dotenv_settings: DotEnvSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            _AllowedOriginsEnvSource(
+                settings_cls,
+                case_sensitive=env_settings.case_sensitive,
+                env_prefix=env_settings.env_prefix,
+                env_nested_delimiter=env_settings.env_nested_delimiter,
+                env_ignore_empty=env_settings.env_ignore_empty,
+                env_parse_none_str=env_settings.env_parse_none_str,
+                env_parse_enums=env_settings.env_parse_enums,
+            ),
+            _AllowedOriginsDotEnvSource(
+                settings_cls,
+                env_file=dotenv_settings.env_file,
+                env_file_encoding=dotenv_settings.env_file_encoding,
+                case_sensitive=dotenv_settings.case_sensitive,
+                env_prefix=dotenv_settings.env_prefix,
+                env_nested_delimiter=dotenv_settings.env_nested_delimiter,
+                env_ignore_empty=dotenv_settings.env_ignore_empty,
+                env_parse_none_str=dotenv_settings.env_parse_none_str,
+                env_parse_enums=dotenv_settings.env_parse_enums,
+            ),
+            file_secret_settings,
+        )
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, value: str | list[str]) -> list[str]:
+        if not isinstance(value, str):
+            return value
+
+        value = value.strip()
+        if not value:
+            return []
+
+        if value.startswith("["):
+            try:
+                origins = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "ALLOWED_ORIGINS must be a JSON array or comma-separated origins."
+                ) from exc
+            if not isinstance(origins, list):
+                raise ValueError("ALLOWED_ORIGINS must be a JSON array.")
+            return origins
+
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
     @property
     def has_gemini(self) -> bool:

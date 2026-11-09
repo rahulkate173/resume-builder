@@ -13,6 +13,30 @@ def test_production_settings_require_a_strong_jwt_secret():
 
 
 @pytest.mark.parametrize(
+    ("origins", "expected"),
+    [
+        ("https://app.example.com", ["https://app.example.com"]),
+        (
+            "https://app.example.com, https://admin.example.com",
+            ["https://app.example.com", "https://admin.example.com"],
+        ),
+        (
+            '["https://app.example.com", "https://admin.example.com"]',
+            ["https://app.example.com", "https://admin.example.com"],
+        ),
+    ],
+)
+def test_allowed_origins_support_environment_value_formats(
+    monkeypatch, origins, expected
+):
+    monkeypatch.setenv("ALLOWED_ORIGINS", origins)
+
+    settings = Settings(_env_file=None, jwt_secret_key="s" * 48)
+
+    assert settings.allowed_origins == expected
+
+
+@pytest.mark.parametrize(
     "secret",
     ["short", "change-me-in-production-supersecret-key"],
 )
