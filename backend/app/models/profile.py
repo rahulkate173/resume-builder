@@ -65,6 +65,8 @@ class UserProfile(BaseModel):
     # Online presence
     linkedin: str = ""
     github: str = ""
+    linkedin_username: str = ""
+    github_username: str = ""
     leetcode: str = ""
     codeforces: str = ""
     portfolio: str = ""
@@ -96,6 +98,8 @@ class ProfileUpdateRequest(BaseModel):
     location: Optional[str] = None
     linkedin: Optional[str] = None
     github: Optional[str] = None
+    linkedin_username: Optional[str] = None
+    github_username: Optional[str] = None
     leetcode: Optional[str] = None
     codeforces: Optional[str] = None
     portfolio: Optional[str] = None

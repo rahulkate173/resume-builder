@@ -55,6 +55,8 @@ export const authApi = {
 export const profileApi = {
   get: () => api.get('/profiles/me'),
   update: (data: Record<string, unknown>) => api.put('/profiles/me', data),
+  githubRepos: (githubUsername: string) =>
+    api.post('/profiles/github/repos', { github_username: githubUsername }),
   parseResume: (file: File) => {
     const form = new FormData()
     form.append('file', file)

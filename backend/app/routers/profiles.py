@@ -10,7 +10,9 @@ from datetime import datetime
 from textwrap import dedent
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -20,6 +22,12 @@ from app.agents.llm import invoke_chat
 
 router   = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
 settings = get_settings()
+
+_GITHUB_USERNAME_PATTERN = r"^(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9-]{0,37}[A-Za-z0-9])$"
+
+
+class GitHubReposRequest(BaseModel):
+    github_username: str = Field(..., min_length=1, max_length=39, pattern=_GITHUB_USERNAME_PATTERN)
 
 
 @router.get("/me")
@@ -34,6 +42,55 @@ async def get_my_profile(current_user: dict = Depends(get_current_user)):
 
     profile.pop("_id", None)
     return profile
+
+
+@router.post("/github/repos")
+async def get_github_repositories(
+    body: GitHubReposRequest,
+    _current_user: dict = Depends(get_current_user),
+):
+    """Fetch public repositories for a GitHub username."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"Accept": "application/vnd.github+json"},
+        ) as client:
+            response = await client.get(
+                f"https://api.github.com/users/{body.github_username}/repos",
+                params={"sort": "pushed", "per_page": 100, "type": "owner"},
+            )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail="Could not reach GitHub. Please try again.") from exc
+
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="GitHub username not found.")
+    if response.status_code == 403 and response.headers.get("X-RateLimit-Remaining") == "0":
+        raise HTTPException(status_code=429, detail="GitHub API rate limit reached. Please try again later.")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="GitHub could not return repositories. Please try again.")
+
+    try:
+        repositories = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="GitHub returned an invalid repository response.") from exc
+    if not isinstance(repositories, list):
+        raise HTTPException(status_code=502, detail="GitHub returned an unexpected repository response.")
+
+    return {
+        "repositories": [
+            {
+                "name": repo.get("name", ""),
+                "description": repo.get("description") or "",
+                "url": repo.get("html_url", ""),
+                "language": repo.get("language") or "",
+                "topics": repo.get("topics") or [],
+                "stars": repo.get("stargazers_count", 0),
+                "fork": repo.get("fork", False),
+            }
+            for repo in repositories
+            if isinstance(repo, dict)
+        ]
+    }
 
 
 @router.put("/me")

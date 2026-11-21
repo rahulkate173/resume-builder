@@ -1,6 +1,9 @@
 """Regression tests for ATS-friendly JD resume formatting."""
 
+import pytest
+
 from app.agents.jd_resume_pipeline import (
+    _persist_jd_resume,
     _deterministic_fill,
     _extract_essential_profile,
 )
@@ -68,3 +71,30 @@ def test_deterministic_jd_resume_formats_entries_as_ats_bullets():
     assert "\\resumeItemListStart\n  \\resumeItem{Built a reliable service}\n\\resumeItemListEnd" in latex
     assert "\\resumeProjectHeading{\\textbf{Resume Builder} $|$ \\emph{Python, FastAPI}}" in latex
     assert "Created an ATS-friendly resume tool" in latex
+
+
+@pytest.mark.asyncio
+async def test_resume_persistence_failure_is_not_hidden(monkeypatch):
+    class BrokenResumes:
+        async def insert_one(self, document):
+            raise RuntimeError("database unavailable")
+
+    class FakeDatabase:
+        resumes = BrokenResumes()
+
+    monkeypatch.setattr("app.core.database.get_db", lambda: FakeDatabase())
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await _persist_jd_resume({
+            "user_id": "test-user",
+            "job_role": "Engineer",
+            "company": "Example",
+            "job_description": "Build dependable systems.",
+            "template_key": "executive",
+            "latex_source": r"\documentclass{article}",
+            "pdf_bytes": None,
+            "review": {"passed": True, "score": 90},
+            "iterations": 1,
+            "github_repos": [],
+            "summary": "Example summary",
+        })

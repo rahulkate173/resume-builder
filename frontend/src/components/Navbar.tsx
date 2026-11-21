@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { FileText, LayoutDashboard, LogOut, Moon, Sun } from 'lucide-react'
+import { FileText, LayoutDashboard, LogOut, Moon, Sun, UserRound } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
@@ -41,6 +41,10 @@ export default function Navbar() {
           <Link to="/dashboard" className="btn-ghost text-xs hidden sm:inline-flex">
             <LayoutDashboard className="w-3.5 h-3.5" />
             Dashboard
+          </Link>
+          <Link to="/profile" className="btn-ghost text-xs">
+            <UserRound className="w-3.5 h-3.5" />
+            Profile
           </Link>
 
           {/* Theme toggle */}
