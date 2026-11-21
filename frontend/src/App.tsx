@@ -9,6 +9,7 @@ import Dashboard from '@/pages/Dashboard'
 import Editor from '@/pages/Editor'
 import JDResumePage from '@/pages/JDResumePage'
 import UploadResumePage from '@/pages/UploadResumePage'
+import Profile from '@/pages/Profile'
 import Navbar from '@/components/Navbar'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/editor/new"      element={<PrivateRoute><><Navbar /><Editor /></></PrivateRoute>} />
         <Route path="/jd-resume"       element={<PrivateRoute><><Navbar /><JDResumePage /></></PrivateRoute>} />
         <Route path="/upload-resume"   element={<PrivateRoute><><Navbar /><UploadResumePage /></></PrivateRoute>} />
+        <Route path="/profile"         element={<PrivateRoute><><Navbar /><Profile /></></PrivateRoute>} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />

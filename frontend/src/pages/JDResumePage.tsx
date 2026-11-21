@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, Building2, FileText, Sparkles, ArrowRight,
-  CheckCircle2, Loader2, AlertCircle, Github,
+  CheckCircle2, Loader2, AlertCircle, Github, MinusCircle,
   BookOpen, ChevronDown, X, ExternalLink, Download
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -15,17 +15,40 @@ interface PipelineStep {
   data?: Record<string, unknown>
   ts?: string
   type?: string
+  status?: 'running' | 'completed' | 'failed' | 'skipped'
 }
 
-const AGENT_META: Record<string, { label: string; color: string; bg: string }> = {
-  web_search: { label: 'Web Search',     color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/30' },
-  summary:    { label: 'Summary Agent',  color: 'text-violet-400',  bg: 'bg-violet-500/10 border-violet-500/30' },
-  profile:    { label: 'Profile Agent',  color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' },
-  github:     { label: 'GitHub Agent',   color: 'text-zinc-300',    bg: 'bg-zinc-500/10 border-zinc-500/30' },
-  generate:   { label: 'Generate Agent', color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/30' },
-  review:     { label: 'Review Agent',   color: 'text-cyan-400',    bg: 'bg-cyan-500/10 border-cyan-500/30' },
-  pdf:        { label: 'PDF Agent',      color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/30' },
-  save:       { label: 'Save',           color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' },
+const AGENT_META: Record<string, { label: string }> = {
+  web_search: { label: 'Web Search' },
+  summary:    { label: 'Summary Agent' },
+  profile:    { label: 'Profile Agent' },
+  github:     { label: 'GitHub Agent' },
+  generate:   { label: 'Generate Agent' },
+  review:     { label: 'Review Agent' },
+  pdf:        { label: 'PDF Agent' },
+  save:       { label: 'Save' },
+  pipeline:   { label: 'Pipeline' },
+}
+
+type StepStatus = 'running' | 'completed' | 'failed' | 'skipped'
+
+function getStepStatus(step: PipelineStep, isRunning: boolean, isLast: boolean): StepStatus {
+  if (isRunning && isLast && step.status !== 'failed' && step.status !== 'skipped') return 'running'
+  if (step.status) return step.status
+  return 'completed'
+}
+
+function StepStatusIcon({ status }: { status: StepStatus }) {
+  if (status === 'failed') return <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
+  if (status === 'skipped') return <MinusCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
+  if (status === 'running') return <Loader2 className="w-4 h-4 flex-shrink-0 mt-0.5 animate-spin text-amber-400" />
+  return <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-400" />
+}
+
+function stepStatusClasses(status: StepStatus) {
+  if (status === 'failed') return 'bg-red-500/5 border-red-500/25'
+  if (status === 'skipped' || status === 'running') return 'bg-amber-500/5 border-amber-500/25'
+  return 'bg-emerald-500/5 border-emerald-500/25'
 }
 
 export default function JDResumePage() {
@@ -40,6 +63,7 @@ export default function JDResumePage() {
   const [finalData, setFinalData]     = useState<Record<string, unknown> | null>(null)
   const [showJd, setShowJd]           = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const savedResumeId = typeof finalData?.resume_id === 'string' ? finalData.resume_id : ''
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +87,10 @@ export default function JDResumePage() {
         form.company,
         form.jobDescription,
         (step) => {
-          const s = step as unknown as PipelineStep
+          const received = step as unknown as PipelineStep
+          const s = received.type === 'error'
+            ? { ...received, agent: 'pipeline', status: 'failed' as const }
+            : received
           setSteps((prev) => {
             // Replace the last step from same agent if it's a progress update
             const last = prev[prev.length - 1]
@@ -76,6 +103,9 @@ export default function JDResumePage() {
         },
         ctrl.signal,
       )
+      if (result.type !== 'error' && typeof result.resume_id !== 'string') {
+        throw new Error('Resume was generated, but could not be saved. Please try again.')
+      }
       setFinalData(result)
       setDone(true)
       if (result.type === 'error') {
@@ -85,7 +115,13 @@ export default function JDResumePage() {
       }
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
-        toast.error((err as Error).message || 'Something went wrong.')
+        const message = (err as Error).message || 'Something went wrong.'
+        setFinalData({ type: 'error', message })
+        setSteps((prev) => prev.some((step) => step.agent === 'pipeline' && step.status === 'failed')
+          ? prev
+          : [...prev, { agent: 'pipeline', message, percent, status: 'failed' }])
+        setDone(true)
+        toast.error(message)
       }
     } finally {
       setRunning(false)
@@ -99,17 +135,18 @@ export default function JDResumePage() {
   }
 
   const handleViewResume = () => {
-    if (finalData?.resume_id) {
-      navigate(`/editor/${finalData.resume_id}`)
+    if (!savedResumeId) {
+      toast.error('This generated resume was not saved and cannot be opened in the editor.')
+      return
     }
+    navigate(`/editor/${savedResumeId}`)
   }
 
   const handleDownloadPdf = async () => {
-    const resumeId = finalData?.resume_id as string | undefined
-    if (!resumeId) { toast.error('No resume ID yet — please wait for generation to complete.'); return }
+    if (!savedResumeId) { toast.error('This generated resume was not saved and cannot be downloaded.'); return }
     setDownloading(true)
     try {
-      const resp = await resumeApi.exportPdf(resumeId)
+      const resp = await resumeApi.exportPdf(savedResumeId)
       const blob = new Blob([resp.data], { type: 'application/pdf' })
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
@@ -289,19 +326,17 @@ export default function JDResumePage() {
             {/* Steps */}
             <div className="space-y-2">
               {steps.map((step, i) => {
-                const meta = AGENT_META[step.agent] || { label: step.agent, color: 'text-zinc-400', bg: 'bg-zinc-800' }
+                const meta = AGENT_META[step.agent] || { label: step.agent }
                 const isLast = i === steps.length - 1
+                const status = getStepStatus(step, running, isLast)
                 return (
                   <div
                     key={i}
-                    className={`flex items-start gap-3 p-3 rounded-lg border text-sm transition-all duration-300 ${meta.bg} ${isLast ? 'opacity-100' : 'opacity-60'}`}
+                    className={`flex items-start gap-3 p-3 rounded-lg border text-sm transition-all duration-300 ${stepStatusClasses(status)}`}
                   >
-                    {isLast
-                      ? <Loader2 className={`w-4 h-4 flex-shrink-0 animate-spin mt-0.5 ${meta.color}`} />
-                      : <CheckCircle2 className={`w-4 h-4 flex-shrink-0 mt-0.5 ${meta.color}`} />
-                    }
+                    <StepStatusIcon status={status} />
                     <div className="min-w-0">
-                      <span className={`font-mono text-[10px] uppercase tracking-wider mr-2 ${meta.color}`}>
+                      <span className="font-mono text-[10px] uppercase tracking-wider mr-2 text-zinc-400">
                         {meta.label}
                       </span>
                       <span className="text-zinc-300">{step.message}</span>
@@ -351,10 +386,13 @@ export default function JDResumePage() {
             {/* Completed steps summary */}
             <div className="mb-6 space-y-1.5">
               {steps.filter((s) => s.type !== 'done').map((step, i) => {
-                const meta = AGENT_META[step.agent] || { label: step.agent, color: 'text-zinc-400', bg: '' }
+                const status = getStepStatus(step, false, false)
                 return (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <CheckCircle2 className={`w-3.5 h-3.5 flex-shrink-0 ${meta.color}`} />
+                  <div key={i} className={`flex items-center gap-2 text-xs ${
+                    status === 'failed' ? 'text-red-400' :
+                    status === 'skipped' ? 'text-amber-400' : 'text-emerald-400'
+                  }`}>
+                    <StepStatusIcon status={status} />
                     <span className="text-zinc-500">{step.message}</span>
                   </div>
                 )
@@ -363,7 +401,7 @@ export default function JDResumePage() {
 
             {/* PDF status banner */}
             {finalData.pdf_success === false && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 mb-2">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 mb-2">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 PDF compile issue — clicking Download will attempt recompilation.
               </div>
@@ -374,7 +412,7 @@ export default function JDResumePage() {
               <button
                 id="jd-download-pdf-btn"
                 onClick={handleDownloadPdf}
-                disabled={downloading || !finalData.resume_id}
+                disabled={downloading || !savedResumeId}
                 className="btn-primary flex-1 justify-center min-w-[140px]"
               >
                 {downloading
@@ -408,6 +446,12 @@ export default function JDResumePage() {
               <h2 className="font-bold text-white">Pipeline Failed</h2>
             </div>
             <p className="text-zinc-400 text-sm mb-4">{finalData.message as string}</p>
+            {steps.filter((step) => step.status === 'failed').map((step, index) => (
+              <div key={index} className="flex items-center gap-2 text-sm text-red-400 mb-4">
+                <StepStatusIcon status="failed" />
+                <span>{step.message}</span>
+              </div>
+            ))}
             <button onClick={handleReset} className="btn-secondary">
               Try Again
             </button>

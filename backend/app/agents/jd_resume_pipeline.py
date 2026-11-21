@@ -42,11 +42,19 @@ MAX_GEN_ITER     = 3    # max resume regeneration loops
 # ── Streaming step events ─────────────────────────────────────────────────────
 
 class JDPipelineStep:
-    def __init__(self, agent: str, message: str, percent: int, data: dict | None = None):
+    def __init__(
+        self,
+        agent: str,
+        message: str,
+        percent: int,
+        data: dict | None = None,
+        status: str = "completed",
+    ):
         self.agent   = agent
         self.message = message
         self.percent = percent
         self.data    = data or {}
+        self.status  = status
         self.ts      = datetime.utcnow().isoformat()
 
     def to_dict(self) -> dict:
@@ -55,6 +63,7 @@ class JDPipelineStep:
             "message": self.message,
             "percent": self.percent,
             "data":    self.data,
+            "status":  self.status,
             "ts":      self.ts,
         }
 
@@ -494,40 +503,35 @@ async def _persist_jd_resume(state: JDPipelineState) -> dict:
     import base64
     from app.core.database import get_db
 
-    resume_id = None
-    try:
-        db = get_db()
-        review = state["review"]
-        doc = {
-            "user_id": state["user_id"],
-            "title": f"{state['job_role']} @ {state['company']}",
-            "job_role": state["job_role"],
-            "company": state["company"],
-            "job_description": state["job_description"][:2000],
-            "template_key": state["template_key"],
-            "latex_output": state["latex_source"],
-            "pdf_base64": (
-                base64.b64encode(state["pdf_bytes"]).decode()
-                if state.get("pdf_bytes")
-                else None
-            ),
-            "verified": review.get("passed", False),
-            "verification_score": review.get("score", 0),
-            "verification_notes": review.get("feedback", ""),
-            "jd_match_score": review.get("score", 0),
-            "ats_score": review.get("score", 0),
-            "agent1_iterations": state["iterations"],
-            "pipeline_type": "jd_agentic",
-            "github_repos_used": state["github_repos"],
-            "summary_used": state["summary"],
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-        }
-        inserted = await db.resumes.insert_one(doc)
-        resume_id = str(inserted.inserted_id)
-    except Exception:
-        pass
-    return {"resume_id": resume_id}
+    db = get_db()
+    review = state["review"]
+    doc = {
+        "user_id": state["user_id"],
+        "title": f"{state['job_role']} @ {state['company']}",
+        "job_role": state["job_role"],
+        "company": state["company"],
+        "job_description": state["job_description"][:2000],
+        "template_key": state["template_key"],
+        "latex_output": state["latex_source"],
+        "pdf_base64": (
+            base64.b64encode(state["pdf_bytes"]).decode()
+            if state.get("pdf_bytes")
+            else None
+        ),
+        "verified": review.get("passed", False),
+        "verification_score": review.get("score", 0),
+        "verification_notes": review.get("feedback", ""),
+        "jd_match_score": review.get("score", 0),
+        "ats_score": review.get("score", 0),
+        "agent1_iterations": state["iterations"],
+        "pipeline_type": "jd_agentic",
+        "github_repos_used": state["github_repos"],
+        "summary_used": state["summary"],
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    }
+    inserted = await db.resumes.insert_one(doc)
+    return {"resume_id": str(inserted.inserted_id)}
 
 
 def _build_jd_pipeline_graph():
@@ -903,19 +907,34 @@ async def run_jd_pipeline_stream(
                 attempt = state.get("iterations", 0) + 1
                 yield JDPipelineStep(
                     "generate",
-                    f"🤖 Generating resume (attempt {attempt}/{MAX_GEN_ITER})…",
+                    (
+                        f"⚠️ AI generation skipped; using the template fallback (attempt {attempt}/{MAX_GEN_ITER})."
+                        if not settings.has_gemini
+                        else f"🤖 Generating resume (attempt {attempt}/{MAX_GEN_ITER})…"
+                    ),
                     50 + (attempt - 1) * 10,
+                    status="completed" if settings.has_gemini else "skipped",
                 ).to_dict()
             elif node == "review":
                 review = values["review"]
                 score = review.get("score", 0)
                 pct = 55 + (state.get("iterations", 0)) * 10
+                review_status = (
+                    "skipped" if not settings.has_gemini
+                    else "completed" if review.get("passed")
+                    else "failed"
+                )
                 if review.get("passed"):
                     yield JDPipelineStep(
                         "review",
-                        f"✅ Review passed (score: {score}/100)",
+                        (
+                            f"⚠️ Structural review passed without Gemini (score: {score}/100)"
+                            if not settings.has_gemini
+                            else f"✅ Review passed (score: {score}/100)"
+                        ),
                         pct + 2,
                         {"score": score},
+                        status=review_status,
                     ).to_dict()
                 else:
                     yield JDPipelineStep(
@@ -923,37 +942,60 @@ async def run_jd_pipeline_stream(
                         f"⚠️ Score {score}/100 below threshold — regenerating…",
                         pct + 2,
                         {"score": score, "feedback": review.get("feedback", "")},
+                        status=review_status,
                     ).to_dict()
             elif node == "web_search":
                 yield JDPipelineStep(
                     "web_search",
-                    f"🔍 Searching the web for {company}…",
+                    (
+                        f"⚠️ Web search skipped; using the job description for {company}."
+                        if not settings.has_tavily
+                        else f"🔍 Searching the web for {company}…"
+                    ),
                     5,
+                    status="completed" if settings.has_tavily else "skipped",
                 ).to_dict()
             elif node == "summary":
                 yield JDPipelineStep(
                     "summary",
-                    "📝 Summarising company intel & JD…",
+                    (
+                        "⚠️ AI summary skipped; using a concise job-description fallback."
+                        if not settings.has_gemini
+                        else "📝 Summarising company intel & JD…"
+                    ),
                     20,
+                    status="completed" if settings.has_gemini else "skipped",
                 ).to_dict()
             elif node == "profile":
                 yield JDPipelineStep(
                     "profile",
                     "👤 Extracting profile details…",
                     30,
+                    status="completed",
                 ).to_dict()
             elif node == "github":
-                yield JDPipelineStep(
-                    "github",
-                    f"🐙 Fetching top GitHub repos for @{state.get('github_username') or 'user'}…",
-                    40,
-                ).to_dict()
                 repos = values["github_repos"]
+                github_skipped = not state.get("github_username") or not repos
                 yield JDPipelineStep(
                     "github",
-                    f"✅ Found {len(repos)} relevant repos",
+                    (
+                        "⚠️ GitHub analysis skipped; no public repositories were available."
+                        if github_skipped
+                        else f"🐙 Fetching top GitHub repos for @{state.get('github_username')}…"
+                    ),
+                    40,
+                    status="skipped" if github_skipped else "completed",
+                ).to_dict()
+                yield JDPipelineStep(
+                    "github",
+                    (
+                        "⚠️ No relevant public repositories found."
+                        if github_skipped
+                        else f"✅ Found {len(repos)} relevant repos"
+                    ),
                     45,
                     {"repos": [repo["name"] for repo in repos]},
+                    status="skipped" if github_skipped else "completed",
                 ).to_dict()
             elif node == "compile_pdf":
                 if values["pdf_success"]:
@@ -961,18 +1003,21 @@ async def run_jd_pipeline_stream(
                         "pdf",
                         "✅ PDF compiled successfully!",
                         95,
+                        status="completed",
                     ).to_dict()
                 else:
                     yield JDPipelineStep(
                         "pdf",
                         f"⚠️ PDF compile issue: {values['pdf_error'][:100]}",
                         95,
+                        status="failed",
                     ).to_dict()
             elif node == "persist":
                 yield JDPipelineStep(
                     "save",
                     "💾 Saving to your dashboard…",
                     98,
+                    status="completed",
                 ).to_dict()
             state.update(values)
 

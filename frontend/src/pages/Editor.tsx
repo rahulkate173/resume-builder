@@ -32,7 +32,6 @@ export default function Editor() {
     const init = async () => {
       setLoading(true)
       try {
-        // Load profile into store
         const { data: profile } = await profileApi.get()
         setResume({
           full_name: profile.full_name || '',
@@ -55,8 +54,12 @@ export default function Editor() {
           skills: profile.skills || [],
           languages: profile.languages || [],
         })
+      } catch {
+        toast.error('Failed to load your profile details.')
+      }
 
-        if (id && id !== 'new') {
+      if (id && id !== 'new') {
+        try {
           const { data: resumeDoc } = await resumeApi.get(id)
           setResume({
             id: resumeDoc._id || id,
@@ -73,13 +76,13 @@ export default function Editor() {
             has_pdf: resumeDoc.has_pdf || false,
           })
           setActiveTemplate(resumeDoc.template_key || 'executive')
+        } catch (err: unknown) {
+          const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          toast.error(detail || 'Failed to load the saved resume.')
         }
-        markClean()
-      } catch {
-        // Guest mode — profile might not exist
-      } finally {
-        setLoading(false)
       }
+      markClean()
+      setLoading(false)
     }
     init()
   }, [id])
