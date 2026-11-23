@@ -47,7 +47,6 @@ async def test_dotenv_enables_langsmith_tracing_for_langchain_calls(
     importlib.reload(app)
     assert os.environ["LANGSMITH_TRACING"] == "true"
     assert os.environ["LANGSMITH_API_KEY"] == "test-key"
-    assert tracing_is_enabled() is True
 
     def fake_chat(messages):
         assert [message.content for message in messages] == [
@@ -61,6 +60,7 @@ async def test_dotenv_enables_langsmith_tracing_for_langchain_calls(
     client = _RecordingLangSmithClient()
 
     with tracing_context(client=client, enabled=True):
+        assert tracing_is_enabled() is True
         response = await llm.invoke_chat("system prompt", "user prompt")
 
     assert response == "trace-check"
