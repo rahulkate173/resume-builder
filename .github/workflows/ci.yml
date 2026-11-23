@@ -37,6 +37,8 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB_NAME: resume_builder_test
           JWT_SECRET_KEY: ci-test-secret-key
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_API_KEY: "lsv2_test_dummy_key"
         run: pytest tests/ -v --tb=short
 
   # ── Frontend tests ────────────────────────────────────────────────────────────
