@@ -7,6 +7,7 @@ from dotenv import main as dotenv_main
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from langsmith import tracing_context
+from langsmith.utils import tracing_is_enabled
 
 from app.agents import llm
 
@@ -46,6 +47,7 @@ async def test_dotenv_enables_langsmith_tracing_for_langchain_calls(
     importlib.reload(app)
     assert os.environ["LANGSMITH_TRACING"] == "true"
     assert os.environ["LANGSMITH_API_KEY"] == "test-key"
+    assert tracing_is_enabled() is True
 
     def fake_chat(messages):
         assert [message.content for message in messages] == [
@@ -58,7 +60,7 @@ async def test_dotenv_enables_langsmith_tracing_for_langchain_calls(
     monkeypatch.setattr(llm, "build_chat_model", lambda **_kwargs: model)
     client = _RecordingLangSmithClient()
 
-    with tracing_context(client=client):
+    with tracing_context(client=client, enabled=True):
         response = await llm.invoke_chat("system prompt", "user prompt")
 
     assert response == "trace-check"
