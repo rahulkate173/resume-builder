@@ -143,9 +143,16 @@ JWT_SECRET_KEY=<generated-secret>
 GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-2.5-flash
 
+# LangSmith tracing (optional)
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your-langsmith-api-key
+# LANGSMITH_PROJECT=resume-builder
+
 # PDF Backend
 LATEX_BACKEND=latexonline   # or: local (requires pdflatex)
 ```
+
+LangSmith traces are sent only when tracing is enabled and a valid API key is set.
 
 > **No API keys?** The app runs in **fallback mode** — deterministic heuristics handle all AI tasks.
 
