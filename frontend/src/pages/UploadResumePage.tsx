@@ -119,13 +119,13 @@ export default function UploadResumePage() {
 
   // ── Save ────────────────────────────────────────────────────────────────────
 
-  const handleSave = async () => {
+  const handleSave = async (destination: 'editor' | 'jd' = 'editor') => {
     if (!parsed) return
     setSaving(true)
     try {
       await profileApi.update(parsed as unknown as Record<string, unknown>)
-      toast.success('Profile updated from your resume!')
-      navigate('/editor/new')
+      toast.success('Profile saved from your resume!')
+      navigate(destination === 'jd' ? '/jd-resume' : '/editor/new')
     } catch {
       toast.error('Failed to save profile.')
     } finally {
@@ -136,7 +136,7 @@ export default function UploadResumePage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#09090B] px-4 py-10">
+    <main className="app-page px-4 py-10">
       <div className="max-w-3xl mx-auto">
 
         {/* Header */}
@@ -400,7 +400,7 @@ export default function UploadResumePage() {
             <div className="flex gap-3 pt-2">
               <button
                 id="save-parsed-profile-btn"
-                onClick={handleSave}
+                onClick={() => handleSave()}
                 disabled={saving}
                 className="btn-primary flex-1 justify-center py-3 text-sm"
               >
@@ -408,11 +408,12 @@ export default function UploadResumePage() {
                 {saving ? 'Saving to Profile…' : 'Save to My Profile'}
               </button>
               <button
-                onClick={() => navigate('/jd-resume')}
-                className="btn-secondary text-sm"
+                onClick={() => handleSave('jd')}
+                disabled={saving}
+                className="btn-secondary text-sm disabled:opacity-50"
               >
-                <ArrowRight className="w-4 h-4" />
-                Use for JD Resume
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                {saving ? 'Saving Profile…' : 'Save & Use for JD Resume'}
               </button>
             </div>
 
@@ -422,6 +423,6 @@ export default function UploadResumePage() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   )
 }

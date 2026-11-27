@@ -1,7 +1,7 @@
 import { useResumeStore } from '@/store/useResumeStore'
 import clsx from 'clsx'
 
-const TEMPLATES = [
+export const RESUME_TEMPLATES = [
   { key: 'executive', label: 'Executive', tag: 'ATS' },
   { key: 'modern',    label: 'Modern',    tag: 'Tech' },
   { key: 'classic',   label: 'Classic',   tag: 'Academic' },
@@ -14,7 +14,7 @@ export default function TemplateSwitcher() {
   return (
     <div className="flex items-center gap-1">
       <span className="text-xs text-zinc-500 mr-1 font-mono">Template:</span>
-      {TEMPLATES.map(({ key, label, tag }) => (
+      {RESUME_TEMPLATES.map(({ key, label, tag }) => (
         <button
           key={key}
           id={`template-${key}`}

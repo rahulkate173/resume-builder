@@ -205,7 +205,7 @@ export default function Editor() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#09090B] flex items-center justify-center">
+      <div className="app-page flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
           <p className="text-zinc-500 text-sm">Loading editor…</p>
@@ -215,9 +215,9 @@ export default function Editor() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-[#09090B] flex flex-col">
+    <main className="app-editor flex flex-col">
       {/* Editor toolbar */}
-      <div className="border-b border-[#27272A] bg-[#09090B] px-4 py-2 flex items-center gap-2">
+      <div className="editor-toolbar border-b px-4 py-2 flex items-center gap-2">
         <button onClick={() => navigate('/dashboard')} className="btn-ghost text-xs">
           <ChevronLeft className="w-3.5 h-3.5" /> Dashboard
         </button>
@@ -247,9 +247,9 @@ export default function Editor() {
       </div>
 
       {/* Main split layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="editor-panels flex flex-1 overflow-hidden">
         {/* LEFT: Form Editor (45%) */}
-        <div className="w-[45%] min-w-0 border-r border-[#27272A] overflow-y-auto flex flex-col">
+        <div className="editor-form-panel w-[45%] min-w-0 border-r overflow-y-auto flex flex-col">
           {showAgentPanel
             ? <AIAgentPanel onClose={toggleAgentPanel} pipelineLog={pipelineLog} />
             : <FormEditor />
@@ -257,9 +257,9 @@ export default function Editor() {
         </div>
 
         {/* RIGHT: Preview (55%) */}
-        <div className="flex-1 overflow-auto bg-zinc-950 flex flex-col">
+        <div className="editor-preview-panel flex-1 overflow-auto flex flex-col">
           {/* Preview toolbar */}
-          <div className="sticky top-0 z-10 border-b border-[#27272A] bg-zinc-950/80 glass px-4 py-2 flex items-center gap-3">
+          <div className="editor-preview-toolbar sticky top-0 z-10 border-b glass px-4 py-2 flex items-center gap-3">
             {hasLatex ? (
               <div className="flex items-center gap-1 bg-white/5 rounded-lg p-0.5">
                 <button
@@ -368,6 +368,6 @@ export default function Editor() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   )
 }

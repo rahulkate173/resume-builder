@@ -159,14 +159,14 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-56px)] bg-[#09090B] flex items-center justify-center">
+      <div className="app-page flex items-center justify-center">
         <Loader2 className="w-7 h-7 animate-spin text-zinc-500" />
       </div>
     )
   }
 
   return (
-    <main className="min-h-[calc(100vh-56px)] bg-[#09090B] px-4 py-8">
+    <main className="app-page px-4 py-8">
       <div className="max-w-3xl mx-auto">
         <Link to="/dashboard" className="btn-ghost text-xs mb-6 inline-flex">
           <ArrowLeft className="w-3.5 h-3.5" /> Dashboard

@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, Building2, FileText, Sparkles, ArrowRight,
-  CheckCircle2, Loader2, AlertCircle, Github, MinusCircle,
-  BookOpen, ChevronDown, X, ExternalLink, Download
+  Search, Building2, Sparkles, ArrowRight,
+  CheckCircle2, Loader2, AlertCircle, MinusCircle,
+  ChevronDown, X, ExternalLink, Download
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { jdResumeApi, resumeApi } from '@/api/client'
+import { RESUME_TEMPLATES } from '@/components/editor/TemplateSwitcher'
 
 interface PipelineStep {
   agent: string
@@ -22,9 +23,9 @@ const AGENT_META: Record<string, { label: string }> = {
   web_search: { label: 'Web Search' },
   summary:    { label: 'Summary Agent' },
   profile:    { label: 'Profile Agent' },
-  github:     { label: 'GitHub Agent' },
+  github:     { label: 'GitHub Repo Fetch' },
   generate:   { label: 'Generate Agent' },
-  review:     { label: 'Review Agent' },
+  review:     { label: 'Gemini Review' },
   pdf:        { label: 'PDF Agent' },
   save:       { label: 'Save' },
   pipeline:   { label: 'Pipeline' },
@@ -33,8 +34,8 @@ const AGENT_META: Record<string, { label: string }> = {
 type StepStatus = 'running' | 'completed' | 'failed' | 'skipped'
 
 function getStepStatus(step: PipelineStep, isRunning: boolean, isLast: boolean): StepStatus {
-  if (isRunning && isLast && step.status !== 'failed' && step.status !== 'skipped') return 'running'
   if (step.status) return step.status
+  if (isRunning && isLast) return 'running'
   return 'completed'
 }
 
@@ -55,7 +56,12 @@ export default function JDResumePage() {
   const navigate = useNavigate()
   const abortRef = useRef<AbortController | null>(null)
 
-  const [form, setForm] = useState({ jobRole: '', company: '', jobDescription: '' })
+  const [form, setForm] = useState({
+    jobRole: '',
+    company: '',
+    jobDescription: '',
+    templateKey: 'executive',
+  })
   const [running, setRunning]         = useState(false)
   const [done, setDone]               = useState(false)
   const [steps, setSteps]             = useState<PipelineStep[]>([])
@@ -102,6 +108,7 @@ export default function JDResumePage() {
           if (typeof s.percent === 'number') setPercent(s.percent)
         },
         ctrl.signal,
+        form.templateKey,
       )
       if (result.type !== 'error' && typeof result.resume_id !== 'string') {
         throw new Error('Resume was generated, but could not be saved. Please try again.')
@@ -173,16 +180,11 @@ export default function JDResumePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#09090B] px-4 py-10">
+    <main className="app-page px-4 py-10">
       <div className="max-w-3xl mx-auto">
 
         {/* Header */}
         <div className="mb-10 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-violet-500/30
-                          bg-violet-500/5 text-xs font-mono text-violet-400 mb-5">
-            <Sparkles className="w-3 h-3" />
-            7-Agent Agentic Pipeline
-          </div>
           <h1 className="text-3xl sm:text-4xl font-black text-white mb-3 tracking-tight">
             Create Resume with&nbsp;
             <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
@@ -190,33 +192,8 @@ export default function JDResumePage() {
             </span>
           </h1>
           <p className="text-zinc-500 text-sm max-w-xl mx-auto leading-relaxed">
-            Our AI agents research the company, analyse your GitHub, and craft a tailored
-            one-page resume — automatically.
+            Tailor your saved profile to a job description and choose the resume format you prefer.
           </p>
-        </div>
-
-        {/* Pipeline architecture mini-diagram */}
-        <div className="card p-4 mb-8 overflow-x-auto">
-          <p className="text-xs font-mono text-zinc-600 uppercase tracking-widest mb-3">Agent Flow</p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {[
-              { icon: Search,    label: 'Web Search' },
-              { icon: BookOpen,  label: 'Summary' },
-              { icon: FileText,  label: 'Profile' },
-              { icon: Github,    label: 'GitHub Repos' },
-              { icon: Sparkles,  label: 'Generate' },
-              { icon: CheckCircle2, label: 'Review' },
-              { icon: FileText,  label: 'PDF' },
-            ].map(({ icon: Icon, label }, i) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1">
-                  <Icon className="w-3 h-3 text-zinc-400" />
-                  <span className="text-[10px] text-zinc-400 font-mono whitespace-nowrap">{label}</span>
-                </div>
-                {i < 6 && <ArrowRight className="w-3 h-3 text-zinc-700 flex-shrink-0" />}
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Form */}
@@ -257,6 +234,21 @@ export default function JDResumePage() {
               <p className="text-[11px] text-zinc-600 mt-1">
                 Our Web Search Agent will gather company intel from the web.
               </p>
+            </div>
+
+            {/* Resume format */}
+            <div>
+              <label htmlFor="jd-template" className="label">Resume Format</label>
+              <select
+                id="jd-template"
+                className="input"
+                value={form.templateKey}
+                onChange={(e) => setForm({ ...form, templateKey: e.target.value })}
+              >
+                {RESUME_TEMPLATES.map(({ key, label, tag }) => (
+                  <option key={key} value={key}>{label} ({tag})</option>
+                ))}
+              </select>
             </div>
 
             {/* Job Description */}
@@ -303,7 +295,7 @@ export default function JDResumePage() {
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-white">
-                  Running 7-Agent Pipeline…
+                  Building your resume…
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono text-zinc-400">{percent}%</span>
@@ -477,6 +469,6 @@ export default function JDResumePage() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   )
 }

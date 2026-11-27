@@ -1,17 +1,25 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { FileText, LayoutDashboard, LogOut, Moon, Sun, UserRound } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
-import { useState, useEffect } from 'react'
+import { useState, useLayoutEffect } from 'react'
 import toast from 'react-hot-toast'
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
-  const [dark, setDark] = useState(true)
+  const [dark, setDark] = useState(() => window.localStorage.getItem('app-theme') === 'dark')
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('light', !dark)
   }, [dark])
+
+  const toggleTheme = () => {
+    setDark((current) => {
+      const next = !current
+      window.localStorage.setItem('app-theme', next ? 'dark' : 'light')
+      return next
+    })
+  }
 
   const handleLogout = () => {
     logout()
@@ -20,18 +28,18 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-[#27272A] bg-[#09090B]/80 glass dark:border-[#27272A] light:border-[#E4E4E7] light:bg-white/80">
-      <div className="max-w-screen-xl mx-auto px-4 h-14 flex items-center justify-between">
+    <nav className="app-navbar sticky top-0 z-50 border-b glass">
+      <div className="max-w-screen-xl mx-auto px-4 h-16 flex items-center justify-between">
 
         {/* Brand */}
         <Link to="/dashboard" className="flex items-center gap-2.5 group">
-          <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-            <FileText className="w-4 h-4 text-[#09090B]" />
+          <div className="app-navbar-mark w-8 h-8 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+            <FileText className="w-4 h-4" />
           </div>
-          <span className="font-semibold text-sm tracking-tight text-white light:text-[#09090B]">
-            Resume<span className="text-zinc-400 light:text-zinc-500">Builder</span>
+          <span className="font-semibold text-sm tracking-tight">
+            Resume<span className="app-navbar-muted">Builder</span>
           </span>
-          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 light:bg-zinc-100 text-zinc-400 light:text-zinc-500 border border-[#27272A] light:border-[#E4E4E7]">
+          <span className="app-navbar-tag font-mono text-[10px] px-1.5 py-0.5 rounded">
             AI
           </span>
         </Link>
@@ -50,9 +58,10 @@ export default function Navbar() {
           {/* Theme toggle */}
           <button
             id="theme-toggle"
-            onClick={() => setDark(!dark)}
+            onClick={toggleTheme}
             className="btn-ghost w-9 h-9 p-0 justify-center"
-            aria-label="Toggle theme"
+            aria-label={`Switch to ${dark ? 'light' : 'dark'} mode`}
+            title={`Switch to ${dark ? 'light' : 'dark'} mode`}
           >
             {dark
               ? <Sun className="w-4 h-4" />
@@ -62,13 +71,13 @@ export default function Navbar() {
 
           {/* User info */}
           {user && (
-            <div className="flex items-center gap-2 ml-2 pl-3 border-l border-[#27272A] light:border-[#E4E4E7]">
-              <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center">
-                <span className="text-[#09090B] font-bold text-xs">
+            <div className="app-navbar-user flex items-center gap-2 ml-2 pl-3">
+              <div className="app-navbar-avatar w-8 h-8 rounded-full flex items-center justify-center">
+                <span className="font-bold text-xs">
                   {user.username[0].toUpperCase()}
                 </span>
               </div>
-              <span className="text-sm text-zinc-400 hidden sm:block">{user.username}</span>
+              <span className="app-navbar-muted text-xs hidden sm:block">{user.username}</span>
               <button
                 id="logout-btn"
                 onClick={handleLogout}

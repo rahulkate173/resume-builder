@@ -126,6 +126,7 @@ export const jdResumeApi = {
     jobDescription: string,
     onStep: (step: Record<string, unknown>) => void,
     signal?: AbortSignal,
+    templateKey = 'executive',
   ): Promise<Record<string, unknown>> => {
     const token = useAuthStore.getState().token
     const resp = await fetch(`${API_BASE_URL}/jd-resume/generate`, {
@@ -138,7 +139,7 @@ export const jdResumeApi = {
         job_role: jobRole,
         company,
         job_description: jobDescription,
-        template_key: 'executive',
+        template_key: templateKey,
       }),
       signal,
     })
